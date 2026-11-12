@@ -528,6 +528,9 @@ def main():
         t("adminTotpBase must not pre-append the suffix (UI405 guard)",
           bool(m) and '+ "/totp"' not in m.group(0),
           (m.group(0) if m else "adminTotpBase not found")[:160])
+        t("sessions uuid uses fmtUuid9-char wrap (mobile)",
+          "function fmtUuid" in appjs and "fmtUuid(s.uuid)" in appjs,
+          "fmtUuid missing/unused in app.js")
 
         # --- fail-closed: ADMIN_USERS unset ---
         s2 = start_server(PORT2, "")

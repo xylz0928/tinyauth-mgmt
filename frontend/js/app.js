@@ -44,6 +44,17 @@
 		return h > 0 ? h + "h " + m + "m" : m + "m";
 	}
 
+	/* uuid for the sessions table: wrap every9 characters (8 hex + the dash)
+	   so the column stays narrow on mobile screens */
+	function fmtUuid(u) {
+		u = String(u || "");
+		var parts = [];
+		for (var i = 0; i < u.length; i += 9) {
+			parts.push(esc(u.slice(i, i + 9)));
+		}
+		return parts.join("<br>");
+	}
+
 	/* api() → parsed JSON; throws {status, message} on failure */
 	function api(path, opts) {
 		return fetch(path, opts).then(function (r) {
@@ -504,7 +515,7 @@
 					return "<span class=\"tag\">" + esc(f) + "</span> ";
 				}).join("");
 				return "<tr>" +
-					"<td><span class=\"chip\">" + esc(s.uuid) + "</span></td>" +
+					"<td><span class=\"chip uuid-chip\">" + fmtUuid(s.uuid) + "</span></td>" +
 					"<td><strong>" + esc(s.username) + "</strong></td>" +
 					"<td>" + esc(s.provider) + "</td>" +
 					"<td>" + esc(fmtTime(s.created_at)) + "</td>" +

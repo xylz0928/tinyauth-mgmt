@@ -438,6 +438,15 @@ table.data tbody tr:last-child td { border-bottom: none; }
 	word-break: break-all;
 }
 
+/* uuid cell: breaks are explicit <br> every9 chars (fmtUuid) — never let the
+   browser split a chunk again, so the column keeps its mobile-friendly grid */
+.uuid-chip {
+	white-space: normal;
+	word-break: normal;
+	line-height: 1.55;
+	display: inline-block;
+}
+
 /* --------------------------------------------------------------------------
    Toolbar (filters / refresh)
    -------------------------------------------------------------------------- */
