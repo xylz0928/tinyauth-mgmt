@@ -17,13 +17,15 @@
 				<span class="brand-mark"></span>
 				<span>tinyauth-mgmt</span>
 				<span class="brand-version" id="brand-version" hidden></span>
-				<span class="brand-sub">console</span>
+				<span class="brand-sub" id="brand-sub">console</span>
 			</div>
 			<div class="header-spacer"></div>
 			<span class="identity" id="identity" hidden>
 				<span class="who" id="identity-user">…</span>
 				<span class="role-badge" id="identity-role">…</span>
 			</span>
+			<button class="icon-btn" id="lang-toggle" type="button"
+				title="Language (auto / zh / en)">自动</button>
 			<button class="icon-btn" id="theme-toggle" type="button" title="Theme">Auto</button>
 		</div>
 	</header>
@@ -36,6 +38,7 @@
 
 	<div class="toast-layer" id="toast-layer"></div>
 
+	<script src="js/i18n.js"></script>
 	<script src="js/app.js"></script>
 </body>
 </html>

@@ -531,6 +531,12 @@ def main():
         t("sessions uuid uses fmtUuid9-char wrap (mobile)",
           "function fmtUuid" in appjs and "fmtUuid(s.uuid)" in appjs,
           "fmtUuid missing/unused in app.js")
+        t("i18n wired: index loads i18n.js, app uses __tmI18n, zh dict present",
+          'js/i18n.js' in open(os.path.join(REPO, "frontend/index.html")).read()
+          and "__tmI18n" in appjs
+          and '"nav.users": "用户"' in
+          open(os.path.join(REPO, "frontend/js/i18n.js")).read(),
+          "i18n wiring missing")
 
         # --- fail-closed: ADMIN_USERS unset ---
         s2 = start_server(PORT2, "")

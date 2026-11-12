@@ -1,9 +1,11 @@
 /* tinyauth-mgmt — frontend core (vanilla, no build step)
    Role-driven navigation; identity comes from the reverse-proxy header chain,
-   so the server is always the authority — the UI only adapts what's shown. */
+   so the server is always the authority — the UI only adapts what's shown.
+   All user-visible strings go through i18n's t() (auto/zh/en). */
 (function () {
 	"use strict";
 
+	var t = window.__tmI18n.t;
 	var me = null;          // {username, role, has_totp}
 	var currentView = null;
 
@@ -19,13 +21,13 @@
 
 	function toast(msg, kind) {
 		var layer = $("toast-layer");
-		var t = document.createElement("div");
-		t.className = "toast" + (kind ? " " + kind : "");
-		t.textContent = msg;
-		layer.appendChild(t);
+		var el = document.createElement("div");
+		el.className = "toast" + (kind ? " " + kind : "");
+		el.textContent = msg;
+		layer.appendChild(el);
 		setTimeout(function () {
-			t.classList.add("out");
-			setTimeout(function () { t.remove(); }, 250);
+			el.classList.add("out");
+			setTimeout(function () { el.remove(); }, 250);
 		}, kind === "error" ? 4200 : 2800);
 	}
 
@@ -102,22 +104,20 @@
 	function errorBox(err) {
 		var hint = "";
 		if (err && err.status === 401) {
-			hint = "<p class=\"card-desc\">No identity received. The reverse proxy must " +
-				"forward tinyauth's <code>Remote-User</code> header — see " +
-				"<code>docs/reverse-proxy</code>.</p>";
+			hint = "<p class=\"card-desc\">" + esc(t("err.401")) + "</p>";
 		} else if (err && err.status === 403) {
-			hint = "<p class=\"card-desc\">Forbidden. Check <code>GATEWAY_TOKEN</code> " +
-				"and your <code>ADMIN_USERS</code> entry.</p>";
+			hint = "<p class=\"card-desc\">" + esc(t("err.403")) + "</p>";
 		}
 		return "<div class=\"card\"><div class=\"error-box\">" +
-			"<strong>" + esc(err && err.message ? err.message : "request failed") +
+			"<strong>" + esc(err && err.message ? err.message : t("err.request")) +
 			"</strong>" + hint + "</div></div>";
 	}
 
 	/* restart outcome is advisory: file/db changes are already durable */
 	function reportRestart(res, okMsg) {
 		if (res && res.restart_ok === false) {
-			toast(okMsg + " — restart failed: " + (res.restart_error || "unknown"), "warn");
+			toast(okMsg + t("restart.failed",
+				{ e: res.restart_error || "?" }), "warn");
 		} else {
 			toast(okMsg, "success");
 		}
@@ -167,14 +167,14 @@
 						if (done) close();
 						else el.disabled = false;   // validation failed: let them retry
 					} catch (e) {
-						toast(e.message || "failed", "error");
+						toast(e.message || t("common.failed"), "error");
 						el.disabled = false;
 					}
 				});
 				actionsEl.appendChild(el);
 			});
 		}
-		renderButtons(opts.buttons || [{ label: "Close", id: "close" }]);
+		renderButtons(opts.buttons || [{ label: t("common.close"), id: "close" }]);
 		return {
 			close: close,
 			body: bodyEl,
@@ -196,14 +196,15 @@
 				title: o.title,
 				body: "<p>" + esc(o.message) + "</p>" + typedHtml,
 				buttons: [
-					{ label: o.confirmLabel || "Confirm", kind: o.danger === false ? "primary" : "danger", id: "ok" },
-					{ label: "Cancel", id: "cancel" }
+					{ label: o.confirmLabel || t("common.save"),
+					  kind: o.danger === false ? "primary" : "danger", id: "ok" },
+					{ label: t("common.cancel"), id: "cancel" }
 				],
 				onAction: function (id) {
 					if (id === "cancel") { resolve(false); return true; }
 					if (o.typed) {
 						var v = m.body.querySelector("#confirm-typed").value.trim();
-						if (v !== o.typed) { toast("text does not match", "error"); return false; }
+						if (v !== o.typed) { toast(t("common.mismatch"), "error"); return false; }
 					}
 					resolve(true);
 					return true;
@@ -219,14 +220,14 @@
 			m = modal({
 				title: title,
 				body:
-					"<div class=\"field\"><span class=\"field-label\">New password (min8)</span>" +
+					"<div class=\"field\"><span class=\"field-label\">" + t("pw.new") + "</span>" +
 					"<input type=\"password\" id=\"pw1\" autocomplete=\"new-password\"></div>" +
-					"<div class=\"field\"><span class=\"field-label\">Repeat password</span>" +
+					"<div class=\"field\"><span class=\"field-label\">" + t("pw.repeat") + "</span>" +
 					"<input type=\"password\" id=\"pw2\" autocomplete=\"new-password\"></div>" +
 					"<div class=\"error-box\" id=\"pw-err\" hidden></div>",
 				buttons: [
-					{ label: "Save", kind: "primary", id: "ok" },
-					{ label: "Cancel", id: "cancel" }
+					{ label: t("common.save"), kind: "primary", id: "ok" },
+					{ label: t("common.cancel"), id: "cancel" }
 				],
 				onAction: function (id) {
 					if (id === "cancel") { resolve(null); return true; }
@@ -235,12 +236,12 @@
 					var errBox = m.body.querySelector("#pw-err");
 					if (a.length < 8) {
 						errBox.hidden = false;
-						errBox.textContent = "Password must be at least 8 characters.";
+						errBox.textContent = t("pw.err_min");
 						return false;
 					}
 					if (a !== b) {
 						errBox.hidden = false;
-						errBox.textContent = "Passwords do not match.";
+						errBox.textContent = t("pw.err_match");
 						return false;
 					}
 					resolve(a);
@@ -254,19 +255,19 @@
 		return new Promise(function (resolve) {
 			var m;
 			m = modal({
-				title: "New user",
+				title: t("user.new.title"),
 				body:
-					"<div class=\"field\"><span class=\"field-label\">Username</span>" +
+					"<div class=\"field\"><span class=\"field-label\">" + t("user.new.name") + "</span>" +
 					"<input type=\"text\" id=\"nu-name\" autocomplete=\"off\" spellcheck=\"false\" " +
-					"placeholder=\"no spaces, no ':'\"></div>" +
-					"<div class=\"field\"><span class=\"field-label\">Password (min8)</span>" +
+					"placeholder=\"" + esc(t("user.new.name_hint")) + "\"></div>" +
+					"<div class=\"field\"><span class=\"field-label\">" + t("user.new.pw") + "</span>" +
 					"<input type=\"password\" id=\"nu-pw1\" autocomplete=\"new-password\"></div>" +
-					"<div class=\"field\"><span class=\"field-label\">Repeat password</span>" +
+					"<div class=\"field\"><span class=\"field-label\">" + t("pw.repeat") + "</span>" +
 					"<input type=\"password\" id=\"nu-pw2\" autocomplete=\"new-password\"></div>" +
 					"<div class=\"error-box\" id=\"nu-err\" hidden></div>",
 				buttons: [
-					{ label: "Create", kind: "primary", id: "ok" },
-					{ label: "Cancel", id: "cancel" }
+					{ label: t("common.create"), kind: "primary", id: "ok" },
+					{ label: t("common.cancel"), id: "cancel" }
 				],
 				onAction: function (id) {
 					if (id === "cancel") { resolve(null); return true; }
@@ -276,9 +277,9 @@
 					var errBox = m.body.querySelector("#nu-err");
 					function fail(msg) { errBox.hidden = false; errBox.textContent = msg; return false; }
 					if (!name || /[\s:]/.test(name) || name.length > 64)
-						return fail("Invalid username (no spaces or ':', max 64).");
-					if (a.length < 8) return fail("Password must be at least 8 characters.");
-					if (a !== b) return fail("Passwords do not match.");
+						return fail(t("user.new.err_name"));
+					if (a.length < 8) return fail(t("pw.err_min"));
+					if (a !== b) return fail(t("pw.err_match"));
 					resolve({ username: name, password: a });
 					return true;
 				}
@@ -287,12 +288,14 @@
 	}
 
 	/* TOTP flow: generate secret -> show binding -> verify code -> saved.
-   base: "/api/admin/users/<user>" or "/api/me" */
+	   base: "/api/admin/users/<user>" or "/api/me" */
 	function totpModal(base, label, mode, onDone) {
 		var m = modal({
-			title: (mode === "rebind" ? "Rebind TOTP · " : "Enable TOTP · ") + label,
-			body: "<div class=\"empty\"><span class=\"spinner\"></span> requesting secret…</div>",
-			buttons: [{ label: "Cancel", id: "cancel" }],
+			title: (mode === "rebind" ? t("totp.rebind_title", { user: label })
+				: t("totp.enable_title", { user: label })),
+			body: "<div class=\"empty\"><span class=\"spinner\"></span> " +
+				t("totp.requesting") + "</div>",
+			buttons: [{ label: t("common.cancel"), id: "cancel" }],
 			onAction: function (id) { if (id === "cancel") { resolveEarly(); } return true; }
 		});
 		var resolved = false;
@@ -301,17 +304,17 @@
 		apiPost(base + "/totp", { action: mode }).then(function (r) {
 			if (resolved) return;
 			m.body.innerHTML =
-				"<div class=\"field\"><span class=\"field-label\">Secret (add to your authenticator)</span>" +
+				"<div class=\"field\"><span class=\"field-label\">" + t("totp.secret") + "</span>" +
 				"<span class=\"chip selectable\">" + esc(r.secret) + "</span></div>" +
-				"<div class=\"field\"><span class=\"field-label\">otpauth link</span>" +
+				"<div class=\"field\"><span class=\"field-label\">" + t("totp.otpauth") + "</span>" +
 				"<span class=\"chip selectable\" style=\"font-size:11px\">" + esc(r.otpauth) + "</span></div>" +
-				"<div class=\"field\"><span class=\"field-label\">Enter the 6-digit code</span>" +
+				"<div class=\"field\"><span class=\"field-label\">" + t("totp.code") + "</span>" +
 				"<input type=\"text\" id=\"totp-code\" class=\"code-input\" inputmode=\"numeric\" " +
 				"autocomplete=\"one-time-code\" maxlength=\"6\" placeholder=\"000000\"></div>" +
 				"<div class=\"error-box\" id=\"totp-err\" hidden></div>";
 			m.renderButtons([
-				{ label: "Verify & save", kind: "primary", id: "save" },
-				{ label: "Cancel", id: "cancel" }
+				{ label: t("totp.verify_save"), kind: "primary", id: "save" },
+				{ label: t("common.cancel"), id: "cancel" }
 			]);
 			m.setHandler(async function (id) {
 				if (id === "cancel") return true;
@@ -319,46 +322,45 @@
 				var errBox = m.body.querySelector("#totp-err");
 				if (!/^\d{6}$/.test(code)) {
 					errBox.hidden = false;
-					errBox.textContent = "Enter the 6-digit code from your authenticator.";
+					errBox.textContent = t("totp.err_code");
 					return false;
 				}
 				var res = await apiPost(base + "/totp",
 					{ action: mode, secret: r.secret, code: code });
-				reportRestart(res, mode === "rebind" ? "TOTP rebound" : "TOTP enabled");
+				reportRestart(res, mode === "rebind" ? t("totp.rebound") : t("totp.enabled"));
 				if (onDone) onDone();
 				return true;
 			});
 		}).catch(function (e) {
 			m.close();
-			toast(e.message || "failed to request secret", "error");
+			toast(e.message || t("common.failed"), "error");
 		});
 	}
 
 	function removeTotp(base, label, onDone) {
 		confirmModal({
-			title: "Remove TOTP · " + label,
-			message: "Your authenticator will stop being required at login. " +
-				"Password login stays unchanged.",
-			confirmLabel: "Remove TOTP"
+			title: t("totp.rm_title", { user: label }),
+			message: t("totp.rm_msg"),
+			confirmLabel: t("totp.rm_confirm")
 		}).then(function (ok) {
 			if (!ok) return;
 			apiPost(base + "/totp", { action: "remove" })
 				.then(function (res) {
-					reportRestart(res, "TOTP removed");
+					reportRestart(res, t("totp.removed"));
 					(onDone || refresh)();
 				})
-				.catch(function (e) { toast(e.message || "failed", "error"); });
+				.catch(function (e) { toast(e.message || t("common.failed"), "error"); });
 		});
 	}
 
 	/* ---------------- views ---------------- */
 
 	var views = { admin: ["users", "sessions", "stack"], self: ["account"] };
-	var viewMeta = {
-		users: { label: "Users" },
-		sessions: { label: "Sessions" },
-		stack: { label: "Stack" },
-		account: { label: "My account" }
+	var NAV_KEYS = {
+		users: "nav.users",
+		sessions: "nav.sessions",
+		stack: "nav.stack",
+		account: "nav.account"
 	};
 
 	function renderNav() {
@@ -366,7 +368,7 @@
 		var list = views[me.role] || [];
 		nav.innerHTML = list.map(function (v) {
 			return "<button class=\"nav-tab\" data-view=\"" + v + "\" type=\"button\">" +
-				esc(viewMeta[v].label) + "</button>";
+				esc(t(NAV_KEYS[v])) + "</button>";
 		}).join("");
 		nav.hidden = false;
 		nav.querySelectorAll(".nav-tab").forEach(function (b) {
@@ -404,33 +406,36 @@
 
 	function viewUsers() {
 		var v = $("view");
-		v.innerHTML = "<div class=\"card\"><div class=\"empty\"><span class=\"spinner\"></span> loading users…</div></div>";
+		v.innerHTML = "<div class=\"card\"><div class=\"empty\"><span class=\"spinner\"></span> " +
+			t("common.loading") + "</div></div>";
 		api("/api/admin/users").then(function (data) {
 			var rows = data.users.map(function (u) {
 				return "<tr>" +
 					"<td><strong>" + esc(u.username) + "</strong></td>" +
 					"<td>" + (u.has_totp
-						? "<span class=\"badge primary\">TOTP</span>"
-						: "<span class=\"badge\">no totp</span>") + "</td>" +
+						? "<span class=\"badge primary\">" + t("badge.totp") + "</span>"
+						: "<span class=\"badge\">" + t("badge.no_totp") + "</span>") + "</td>" +
 					"<td>" + esc(u.active_sessions) + " / " + esc(u.total_sessions) + "</td>" +
 					"<td><div class=\"actions\">" +
-						"<button class=\"btn small\" data-act=\"pw\" data-u=\"" + esc(u.username) + "\">Password</button>" +
+						"<button class=\"btn small\" data-act=\"pw\" data-u=\"" + esc(u.username) + "\">" +
+							t("btn.password") + "</button>" +
 						"<button class=\"btn small\" data-act=\"totp\" data-u=\"" + esc(u.username) +
-							"\" data-has=\"" + (u.has_totp ? "1" : "0") + "\">TOTP</button>" +
-						"<button class=\"btn small danger\" data-act=\"del\" data-u=\"" + esc(u.username) + "\">Delete</button>" +
+							"\" data-has=\"" + (u.has_totp ? "1" : "0") + "\">" + t("badge.totp") + "</button>" +
+						"<button class=\"btn small danger\" data-act=\"del\" data-u=\"" + esc(u.username) + "\">" +
+							t("btn.delete") + "</button>" +
 					"</div></td>" +
 					"</tr>";
 			}).join("");
 			v.innerHTML =
 				"<div class=\"card\">" +
-				"  <div class=\"toolbar\"><h2 class=\"card-title grow\">Users</h2>" +
-				"    <button class=\"btn primary small\" id=\"users-new\">+ New user</button></div>" +
-				"  <p class=\"card-desc\">Local accounts from the tinyauth users file · " +
-				"active / total sessions</p>" +
+				"  <div class=\"toolbar\"><h2 class=\"card-title grow\">" + t("users.title") + "</h2>" +
+				"    <button class=\"btn primary small\" id=\"users-new\">" + t("users.new") + "</button></div>" +
+				"  <p class=\"card-desc\">" + esc(t("users.desc")) + "</p>" +
 				"  <div class=\"table-wrap\"><table class=\"data\">" +
-				"    <thead><tr><th>Username</th><th>TOTP</th>" +
-				"    <th>Sessions (active / total)</th><th>Actions</th></tr></thead>" +
-				"    <tbody>" + (rows || "<tr><td colspan=\"4\" class=\"empty\">no users</td></tr>") + "</tbody>" +
+				"    <thead><tr><th>" + t("th.username") + "</th><th>" + t("th.totp") + "</th>" +
+				"    <th>" + t("th.sessions") + "</th><th>" + t("th.actions") + "</th></tr></thead>" +
+				"    <tbody>" + (rows || "<tr><td colspan=\"4\" class=\"empty\">" +
+					t("users.empty") + "</td></tr>") + "</tbody>" +
 				"  </table></div>" +
 				"</div>";
 
@@ -439,9 +444,9 @@
 				if (!creds) return;
 				try {
 					var res = await apiPost("/api/admin/users", creds);
-					reportRestart(res, "User '" + creds.username + "' created");
+					reportRestart(res, t("user.created", { user: creds.username }));
 					refresh();
-				} catch (e) { toast(e.message || "failed", "error"); }
+				} catch (e) { toast(e.message || t("common.failed"), "error"); }
 			});
 
 			v.querySelectorAll("button[data-act]").forEach(function (btn) {
@@ -450,12 +455,12 @@
 					var act = btn.dataset.act;
 					try {
 						if (act === "pw") {
-							var pw = await passwordModal("Change password · " + user);
+							var pw = await passwordModal(t("pw.title", { user: user }));
 							if (!pw) return;
 							var res = await apiPost(
 								"/api/admin/users/" + encodeURIComponent(user) + "/password",
 								{ password: pw });
-							reportRestart(res, "Password changed for '" + user + "'");
+							reportRestart(res, t("user.pw_changed", { user: user }));
 						} else if (act === "totp") {
 							if (btn.dataset.has === "1") {
 								totpEntryChoice(user);
@@ -464,20 +469,20 @@
 							}
 						} else if (act === "del") {
 							var ok = await confirmModal({
-								title: "Delete user · " + user,
-								message: "Removes the account and kicks all of its sessions. " +
-									"This cannot be undone.",
-								confirmLabel: "Delete " + user,
+								title: t("user.del.title", { user: user }),
+								message: t("user.del.msg"),
+								confirmLabel: t("user.del.confirm", { user: user }),
 								typed: user
 							});
 							if (!ok) return;
 							var res2 = await apiDelete(
 								"/api/admin/users/" + encodeURIComponent(user));
-							reportRestart(res2, "User '" + user + "' deleted" +
-								(res2.sessions_flushed ? " (" + res2.sessions_flushed + " sessions kicked)" : ""));
+							reportRestart(res2, res2.sessions_flushed
+								? t("user.deleted_n", { user: user, n: res2.sessions_flushed })
+								: t("user.deleted", { user: user }));
 							refresh();
 						}
-					} catch (e) { toast(e.message || "failed", "error"); }
+					} catch (e) { toast(e.message || t("common.failed"), "error"); }
 				});
 			});
 		}).catch(function (err) { v.innerHTML = errorBox(err); });
@@ -486,13 +491,12 @@
 	/* small chooser when a user already has TOTP */
 	function totpEntryChoice(user) {
 		var m = modal({
-			title: "TOTP · " + user,
-			body: "<p>This user already has TOTP bound. Rebind replaces the current " +
-				"secret (authenticators must scan the new one); remove turns TOTP off.</p>",
+			title: t("totp.entry.title", { user: user }),
+			body: "<p>" + esc(t("totp.entry.msg")) + "</p>",
 			buttons: [
-				{ label: "Rebind", kind: "primary", id: "rebind" },
-				{ label: "Remove", kind: "danger", id: "remove" },
-				{ label: "Cancel", id: "cancel" }
+				{ label: t("totp.rebind"), kind: "primary", id: "rebind" },
+				{ label: t("totp.remove"), kind: "danger", id: "remove" },
+				{ label: t("common.cancel"), id: "cancel" }
 			],
 			onAction: function (id) {
 				if (id === "rebind") { m.close(); totpModal(adminTotpBase(user), user, "rebind", refresh); }
@@ -502,13 +506,14 @@
 		});
 	}
 
-	/* ---- sessions (admin) ---- */
+	/* ---- sessions (admin): responsive item cards ---- */
 
 	var sessionFilter = "";
 
 	function viewSessions() {
 		var v = $("view");
-		v.innerHTML = "<div class=\"card\"><div class=\"empty\"><span class=\"spinner\"></span> loading sessions…</div></div>";
+		v.innerHTML = "<div class=\"card\"><div class=\"empty\"><span class=\"spinner\"></span> " +
+			t("common.loading") + "</div></div>";
 		api("/api/admin/sessions").then(function (data) {
 			var all = data.sessions || [];
 			var q = sessionFilter.trim().toLowerCase();
@@ -531,18 +536,20 @@
 					"<span class=\"s-uuid chip uuid-chip\">" + fmtUuid(s.uuid) + "</span>" +
 					"<div class=\"s-body\">" +
 						"<div class=\"s-line\">" +
-							field("User", "<strong>" + esc(s.username) + "</strong>") +
-							field("Provider", esc(s.provider)) +
-							field("Flags", flags || "—") +
+							field(t("f.user"), "<strong>" + esc(s.username) + "</strong>") +
+							field(t("f.provider"), esc(s.provider)) +
+							field(t("f.flags"), flags || "—") +
 						"</div>" +
 						"<div class=\"s-line\">" +
-							field("Created", esc(fmtTime(s.created_at))) +
-							field("Expires", esc(fmtTime(s.expires_at))) +
-							field("Remaining", esc(fmtRemaining(s.remaining))) +
+							field(t("f.created"), esc(fmtTime(s.created_at))) +
+							field(t("f.expires"), esc(fmtTime(s.expires_at))) +
+							field(t("f.remaining"), esc(fmtRemaining(s.remaining))) +
 						"</div>" +
 						"<div class=\"s-line\">" +
-							field("Status", "<span class=\"badge " + cls + "\">" + esc(st) + "</span>") +
-							"<button class=\"btn small danger\" data-kick=\"" + esc(s.username) + "\">Kick</button>" +
+							field(t("f.status"),
+								"<span class=\"badge " + cls + "\">" + esc(st) + "</span>") +
+							"<button class=\"btn small danger\" data-kick=\"" + esc(s.username) + "\">" +
+								t("btn.kick") + "</button>" +
 						"</div>" +
 					"</div>" +
 				"</div>";
@@ -551,19 +558,19 @@
 			v.innerHTML =
 				"<div class=\"card\">" +
 				"  <div class=\"toolbar\">" +
-				"    <h2 class=\"card-title grow\">Sessions</h2>" +
-				"    <button class=\"btn danger small\" id=\"sess-kickall\">Kick all</button>" +
-				"    <button class=\"btn small\" id=\"sess-refresh\">Refresh</button>" +
+				"    <h2 class=\"card-title grow\">" + t("sessions.title") + "</h2>" +
+				"    <button class=\"btn danger small\" id=\"sess-kickall\">" +
+				t("sessions.kick_all") + "</button>" +
+				"    <button class=\"btn small\" id=\"sess-refresh\">" + t("common.refresh") + "</button>" +
 				"  </div>" +
-				"  <p class=\"card-desc\">Every session in tinyauth's store · expiry slides " +
-				"on use, hard cap " + esc(fmtRemaining(data.session_max_lifetime)) +
-				" from login</p>" +
+				"  <p class=\"card-desc\">" +
+				esc(t("sessions.desc", { cap: fmtRemaining(data.session_max_lifetime) })) + "</p>" +
 				"  <div class=\"toolbar\">" +
-				"    <input type=\"search\" id=\"sess-filter\" placeholder=\"filter by username or uuid\" value=\"" +
-				esc(sessionFilter) + "\">" +
+				"    <input type=\"search\" id=\"sess-filter\" placeholder=\"" +
+				esc(t("sessions.filter")) + "\" value=\"" + esc(sessionFilter) + "\">" +
 				"  </div>" +
 				"  <div class=\"session-list\">" +
-				(items || "<div class=\"empty\">no sessions match</div>") +
+				(items || "<div class=\"empty\">" + t("sessions.empty") + "</div>") +
 				"  </div>" +
 				"</div>";
 
@@ -583,51 +590,49 @@
 				btn.addEventListener("click", async function () {
 					var user = btn.dataset.kick;
 					var ok = await confirmModal({
-						title: "Kick sessions · " + user,
-						message: "Ends ALL sessions of '" + user + "'. " +
-							"Their next request goes back to the tinyauth login.",
-						confirmLabel: "Kick " + user
+						title: t("kick.title", { user: user }),
+						message: t("kick.msg", { user: user }),
+						confirmLabel: t("kick.confirm", { user: user })
 					});
 					if (!ok) return;
 					try {
 						var res = await apiPost("/api/admin/flush", { username: user });
-						toast("Kicked " + res.removed + " session(s) of '" + user + "'", "success");
+						toast(t("kick.done", { n: res.removed, user: user }), "success");
 						refresh();
-					} catch (e) { toast(e.message || "failed", "error"); }
+					} catch (e) { toast(e.message || t("common.failed"), "error"); }
 				});
 			});
 
 			$("sess-kickall").addEventListener("click", async function () {
 				var ok = await confirmModal({
-					title: "Kick ALL sessions",
-					message: "Every user on every site must log in again.",
-					confirmLabel: "Kick everyone",
+					title: t("kickall.title"),
+					message: t("kickall.msg"),
+					confirmLabel: t("kickall.confirm"),
 					typed: "ALL"
 				});
 				if (!ok) return;
 				try {
 					var res = await apiPost("/api/admin/flush", { all: true });
-					toast("Kicked " + res.removed + " session(s) total", "success");
+					toast(t("kickall.done", { n: res.removed }), "success");
 					refresh();
-				} catch (e) { toast(e.message || "failed", "error"); }
+				} catch (e) { toast(e.message || t("common.failed"), "error"); }
 			});
 		}).catch(function (err) { v.innerHTML = errorBox(err); });
 	}
-
-	/* ---- stack (admin) ---- */
 
 	/* ---- time sources card (Stack tab) ----
 	   One snapshot every30s: browser + three server sources are fetched and
 	   rendered TOGETHER, so offsets stay constant between refreshes (no
 	   growing drift). The cycle stops while the tab is hidden or the view
-	   is left — nothing keeps polling in the background. */
+	   is left — nothing keeps polling in the background. The card FRAME is
+	   created first (loading state) and only its contents are updated. */
 	function fmtTimeTz(epoch, tz) {
 		try {
 			return new Intl.DateTimeFormat("sv-SE", {
 				timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
 				hour: "2-digit", minute: "2-digit", second: "2-digit",
 				hourCycle: "h23"
-			}).format(new Date(epoch *1000));
+			}).format(new Date(epoch * 1000));
 		} catch (e) {
 			return fmtTime(epoch);   // unknown tz: fall back to browser local
 		}
@@ -641,13 +646,14 @@
 				"<td class=\"t-off\">—</td>" +
 				"<td class=\"t-detail\">—</td></tr>";
 		}
-		return "<h2 class=\"card-title\">Time</h2>" +
+		return "<h2 class=\"card-title\">" + t("time.title") + "</h2>" +
 			"<p class=\"card-desc\" id=\"time-desc\">" +
-			"<span class=\"spinner\"></span> loading time sources…</p>" +
+			"<span class=\"spinner\"></span> " + t("time.loading") + "</p>" +
 			"<div class=\"table-wrap\"><table class=\"data\"><thead><tr>" +
-			"<th>Source</th><th>Time</th><th>Offset vs browser</th><th>Detail</th>" +
+			"<th>" + t("th.source") + "</th><th>" + t("th.time") + "</th>" +
+			"<th>" + t("th.offset") + "</th><th>" + t("th.detail") + "</th>" +
 			"</tr></thead><tbody>" +
-			row("browser", "Browser (this device)") +
+			row("browser", t("time.browser")) +
 			row("ntp", "NTP") +
 			row("tinyauth", "tinyauth") +
 			row("backend", "tinyauth-mgmt") +
@@ -656,34 +662,36 @@
 
 	/* updates happen IN PLACE — the card frame is never destroyed, so the
 	   first load and the30s cycle never make the card disappear */
-	function updateTimeCard(t) {
+	function updateTimeCard(tdata) {
 		var card = document.getElementById("time-card");
 		if (!card) return;
-		var tz = t.display_tz || "";
+		var tz = tdata.display_tz || "";
 		var desc = document.getElementById("time-desc");
 		if (desc) {
+			var srcLabel = tdata.display_tz_source === "TZ env" ? t("time.src_env")
+				: (tdata.display_tz_source === "default" ? t("time.src_default")
+					: tdata.display_tz_source || t("time.src_default"));
 			desc.innerHTML =
-				"Base timezone <span class=\"tag\">" + esc(tz || "UTC") + "</span> " +
-				"<span class=\"field-hint\">(from " +
-				esc(t.display_tz_source === "TZ env"
-					? "tinyauth-mgmt's TZ env" : t.display_tz_source || "default") +
-				" · every row below renders in it)</span><br>" +
-				"one snapshot every30s — polling stops while this tab or view is " +
-				"inactive · drift &gt; 5s can break TOTP";
+				"<strong>" + esc(t("time.base_tz")) + "</strong> " +
+				"<span class=\"tag\">" + esc(tz || "UTC") + "</span> " +
+				"<span class=\"field-hint\">" +
+				esc(t("time.from_src", { src: srcLabel })) + "</span><br>" +
+				esc(t("time.desc2"));
 		}
 		var now = Date.now() / 1000;
-		var values = { browser: now, ntp: t.ntp.epoch,
-			tinyauth: t.tinyauth.epoch, backend: t.backend.epoch };
+		var values = { browser: now, ntp: tdata.ntp.epoch,
+			tinyauth: tdata.tinyauth.epoch, backend: tdata.backend.epoch };
 		var btz = "";
 		try { btz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
 		var details = {
-			browser: "browser tz: " + (btz || "?") + " · reference",
-			ntp: t.ntp.error ? t.ntp.error :
-				("server: " + (t.ntp.server || "") +
-				 (typeof t.ntp.age === "number" && t.ntp.age >= 1
-					? " · queried " + Math.round(t.ntp.age) + "s ago" : "")),
-			tinyauth: t.tinyauth.error ? t.tinyauth.error : "HTTP Date header",
-			backend: "tz " + (t.backend.tz || "?") + " · " + (t.backend.local || "")
+			browser: t("time.browser_detail", { tz: btz || "?" }),
+			ntp: tdata.ntp.error ? tdata.ntp.error :
+				t("time.ntp_server", { s: tdata.ntp.server || "" }) +
+				(typeof tdata.ntp.age === "number" && tdata.ntp.age >= 1
+					? t("time.queried", { n: Math.round(tdata.ntp.age) }) : ""),
+			tinyauth: tdata.tinyauth.error ? tdata.tinyauth.error : t("time.httpdate"),
+			backend: t("time.backend_detail",
+				{ tz: tdata.backend.tz || "?", local: tdata.backend.local || "" })
 		};
 		card.querySelectorAll("tr[data-src]").forEach(function (tr) {
 			var src = tr.dataset.src;
@@ -721,7 +729,7 @@
 				return;
 			}
 			loadTimeCard();
-		},30000);
+		}, 30000);
 	}
 
 	function loadTimeCard() {
@@ -734,65 +742,74 @@
 			card.innerHTML = timeCardFrame();
 			$("view").appendChild(card);
 		}
-		api("/api/admin/time").then(function (t) {
+		api("/api/admin/time").then(function (tdata) {
 			if (currentView !== "stack") return;   // navigated away meanwhile
-			updateTimeCard(t);                     // in-place: frame preserved
+			updateTimeCard(tdata);                 // in-place: frame preserved
 		}).catch(function () {
 			var desc = document.getElementById("time-desc");
 			if (desc) {
-				desc.innerHTML = "<span class=\"error-box\">time sources " +
-					"unavailable — will retry with the next snapshot</span>";
+				desc.innerHTML = "<span class=\"error-box\">" +
+					t("time.unavailable") + "</span>";
 			}
 		});
 		ensureTimeCycle();   // cycle also retries after a failed fetch
 	}
 
+	/* ---- stack (admin) ---- */
+
 	function viewStack() {
 		var v = $("view");
-		v.innerHTML = "<div class=\"card\"><div class=\"empty\"><span class=\"spinner\"></span> loading stack info…</div></div>";
+		v.innerHTML = "<div class=\"card\"><div class=\"empty\"><span class=\"spinner\"></span> " +
+			t("common.loading") + "</div></div>";
 		api("/api/admin/image").then(function (d) {
 			var matchBadge = d.compose_image == null
-				? "<span class=\"badge\">compose n/a</span>"
+				? "<span class=\"badge\">" + t("stack.no_compose") + "</span>"
 				: (d.match
-					? "<span class=\"badge success\">match</span>"
-					: "<span class=\"badge error\">mismatch</span>");
+					? "<span class=\"badge success\">" + t("stack.match") + "</span>"
+					: "<span class=\"badge error\">" + t("stack.mismatch") + "</span>");
 			var health = d.health
-				? "<span class=\"badge " + (d.health === "healthy" ? "success" : "warn") + "\">" + esc(d.health) + "</span>"
-				: "<span class=\"badge\">n/a</span>";
+				? "<span class=\"badge " + (d.health === "healthy" ? "success" : "warn") + "\">" +
+					esc(d.health) + "</span>"
+				: "<span class=\"badge\">—</span>";
 			v.innerHTML =
 				"<div class=\"card\">" +
-				"  <div class=\"toolbar\"><h2 class=\"card-title grow\">Stack</h2>" +
-				"    <button class=\"btn danger small\" id=\"stack-restart\">Restart tinyauth</button>" +
-				"    <button class=\"btn small\" id=\"stack-refresh\">Refresh</button></div>" +
-				"  <p class=\"card-desc\">Backend: <span class=\"tag\">" + esc(d.backend || "?") +
-				"</span> · container vs compose " + matchBadge + " · health " + health + "</p>" +
+				"  <div class=\"toolbar\"><h2 class=\"card-title grow\">" + t("stack.title") + "</h2>" +
+				"    <button class=\"btn danger small\" id=\"stack-restart\">" +
+					t("stack.restart") + "</button>" +
+				"    <button class=\"btn small\" id=\"stack-refresh\">" + t("common.refresh") +
+					"</button></div>" +
+				"  <p class=\"card-desc\">" + esc(t("stack.backend")) +
+				" <span class=\"tag\">" + esc(d.backend || "?") + "</span> · " +
+				esc(t("stack.vc")) + " " + matchBadge + " · " +
+				esc(t("stack.health")) + " " + health + "</p>" +
 				"  <dl class=\"kv\">" +
-				"    <dt>container</dt><dd>" + esc(d.container_name || "—") + "</dd>" +
-				"    <dt>state</dt><dd>" + esc(d.state || "—") + "</dd>" +
-				"    <dt>image (running)</dt><dd>" + esc(d.container_image || "—") + "</dd>" +
-				"    <dt>image (compose)</dt><dd>" + esc(d.compose_image || (d.compose_note || "—")) + "</dd>" +
-				"    <dt>compose project</dt><dd>" + esc(d.project || "—") + "</dd>" +
-				"    <dt>created</dt><dd>" + esc(fmtTime(d.created)) + "</dd>" +
+				"    <dt>" + t("kv.container") + "</dt><dd>" + esc(d.container_name || "—") + "</dd>" +
+				"    <dt>" + t("kv.state") + "</dt><dd>" + esc(d.state || "—") + "</dd>" +
+				"    <dt>" + t("kv.img_run") + "</dt><dd>" + esc(d.container_image || "—") + "</dd>" +
+				"    <dt>" + t("kv.img_cmp") + "</dt><dd>" +
+					esc(d.compose_image || (d.compose_note || "—")) + "</dd>" +
+				"    <dt>" + t("kv.project") + "</dt><dd>" + esc(d.project || "—") + "</dd>" +
+				"    <dt>" + t("kv.created") + "</dt><dd>" + esc(fmtTime(d.created)) + "</dd>" +
 				"  </dl>" +
 				"</div>";
 			$("stack-refresh").addEventListener("click", viewStack);
 			$("stack-restart").addEventListener("click", async function () {
 				var ok = await confirmModal({
-					title: "Restart tinyauth",
-					message: "Gracefully restarts the tinyauth container. Active sessions " +
-						"survive (they live in the database); logins pause for a few seconds.",
-					confirmLabel: "Restart"
+					title: t("stack.rs_title"),
+					message: t("stack.rs_msg"),
+					confirmLabel: t("stack.rs_confirm"),
+					danger: false
 				});
 				if (!ok) return;
 				try {
 					var res = await apiPost("/api/admin/restart", { scope: "container" });
 					if (res.healthy) {
-						toast("tinyauth restarted (" + res.waited_s + "s, via " + res.backend + ")", "success");
+						toast(t("stack.rs_ok", { s: res.waited_s, b: res.backend }), "success");
 					} else {
-						toast(res.warning || "restarted, but health check pending", "warn");
+						toast(res.warning || t("stack.rs_pending"), "warn");
 					}
 					refresh();
-				} catch (e) { toast(e.message || "restart failed", "error"); }
+				} catch (e) { toast(e.message || t("common.failed"), "error"); }
 			});
 			loadTimeCard();
 		}).catch(function (err) { v.innerHTML = errorBox(err); });
@@ -803,39 +820,40 @@
 	function viewAccount() {
 		var v = $("view");
 		var totpCard = me.has_totp
-			? "<div class=\"field\"><span class=\"field-label\">My TOTP</span>" +
-			  "<span class=\"field-hint\">Bound. Rebind replaces the secret; remove turns it off.</span></div>" +
+			? "<div class=\"field\"><span class=\"field-label\">" + t("acc.my_totp") + "</span>" +
+			  "<span class=\"field-hint\">" + esc(t("acc.bound")) + "</span></div>" +
 			  "<div class=\"card-actions\">" +
-			  "<button class=\"btn small\" id=\"acc-rebind\">Rebind TOTP</button>" +
-			  "<button class=\"btn small danger\" id=\"acc-remove\">Remove TOTP</button></div>"
-			: "<div class=\"field\"><span class=\"field-label\">My TOTP</span>" +
-			  "<span class=\"field-hint\">Not bound yet. Enabling shows a secret to scan " +
-			  "and asks for a test code.</span></div>" +
+			  "<button class=\"btn small\" id=\"acc-rebind\">" + t("acc.rebind_totp") + "</button>" +
+			  "<button class=\"btn small danger\" id=\"acc-remove\">" + t("acc.remove_totp") +
+			  "</button></div>"
+			: "<div class=\"field\"><span class=\"field-label\">" + t("acc.my_totp") + "</span>" +
+			  "<span class=\"field-hint\">" + esc(t("acc.unbound")) + "</span></div>" +
 			  "<div class=\"card-actions\">" +
-			  "<button class=\"btn primary small\" id=\"acc-enable\">Enable TOTP</button></div>";
+			  "<button class=\"btn primary small\" id=\"acc-enable\">" + t("acc.enable_totp") +
+			  "</button></div>";
 
 		v.innerHTML =
 			"<div class=\"card\">" +
-			"  <h2 class=\"card-title\">My account</h2>" +
-			"  <p class=\"card-desc\">Signed in as <strong>" + esc(me.username) +
-			"</strong> · self-service only — your username comes from the login " +
-			"chain and cannot be changed here.</p>" +
-			"  <div class=\"field\"><span class=\"field-label\">Change password</span>" +
-			"    <span class=\"field-hint\">Applies to your own account only.</span></div>" +
+			"  <h2 class=\"card-title\">" + t("acc.title") + "</h2>" +
+			"  <p class=\"card-desc\">" +
+			esc(t("acc.desc", { user: me.username })) + "</p>" +
+			"  <div class=\"field\"><span class=\"field-label\">" + t("acc.change_pw") + "</span>" +
+			"    <span class=\"field-hint\">" + esc(t("acc.pw_hint")) + "</span></div>" +
 			"  <div class=\"card-actions\">" +
-			"    <button class=\"btn primary small\" id=\"acc-pw\">Change password</button></div>" +
+			"    <button class=\"btn primary small\" id=\"acc-pw\">" + t("acc.change_pw") +
+			"</button></div>" +
 			"</div>" +
 			"<div class=\"card\">" +
-			"  <h2 class=\"card-title\">Two-factor</h2>" + totpCard +
+			"  <h2 class=\"card-title\">" + t("acc.2fa") + "</h2>" + totpCard +
 			"</div>";
 
 		$("acc-pw").addEventListener("click", async function () {
-			var pw = await passwordModal("Change my password");
+			var pw = await passwordModal(t("pw.self_title"));
 			if (!pw) return;
 			try {
 				var res = await apiPost("/api/me/password", { password: pw });
-				reportRestart(res, "Your password changed");
-			} catch (e) { toast(e.message || "failed", "error"); }
+				reportRestart(res, t("user.pw_changed", { user: me.username }));
+			} catch (e) { toast(e.message || t("common.failed"), "error"); }
 		});
 
 		var enableBtn = $("acc-enable");
@@ -874,9 +892,33 @@
 
 	/* ---------------- boot ---------------- */
 
+	function renderIdentity() {
+		$("identity").hidden = false;
+		$("identity-user").textContent = me.username;
+		var rb = $("identity-role");
+		rb.textContent = t(me.role === "admin" ? "role.admin" : "role.self");
+		rb.className = "role-badge " + (me.role === "admin" ? "admin" : "self");
+	}
+
 	function boot() {
-		var btn = $("theme-toggle");
-		btn.addEventListener("click", function () { window.__tmTheme.cycle(); });
+		$("brand-sub").textContent = t("brand.console");
+
+		$("theme-toggle").addEventListener("click", function () {
+			window.__tmTheme.cycle();
+		});
+
+		// language: 自动 -> 中 -> EN (text button, unlike the icon theme toggle)
+		var langBtn = $("lang-toggle");
+		langBtn.textContent = window.__tmI18n.toggleLabel();
+		langBtn.addEventListener("click", function () {
+			window.__tmI18n.cycle();
+			langBtn.textContent = window.__tmI18n.toggleLabel();
+			$("brand-sub").textContent = t("brand.console");
+			if (me) {
+				renderNav();
+				route();          // re-render everything in the new language
+			}
+		});
 
 		// background tab = no polling; returning = one fresh snapshot + resume
 		document.addEventListener("visibilitychange", function () {
@@ -898,17 +940,13 @@
 
 		api("/api/me").then(function (m) {
 			me = m;
-			$("identity").hidden = false;
-			$("identity-user").textContent = m.username;
-			var rb = $("identity-role");
-			rb.textContent = m.role === "admin" ? "admin" : "self";
-			rb.className = "role-badge " + (m.role === "admin" ? "admin" : "self");
+			renderIdentity();
 			renderNav();
 			window.addEventListener("hashchange", route);
 			route();
 		}).catch(function (err) {
 			$("identity").hidden = false;
-			$("identity-user").textContent = "no identity";
+			$("identity-user").textContent = "—";
 			$("identity-role").textContent = "error";
 			$("identity-role").className = "role-badge self";
 			$("view").innerHTML = errorBox(err);
