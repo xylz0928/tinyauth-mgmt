@@ -184,8 +184,20 @@ def start_server(port, admin_users, extra_env=None):
 
 def main():
     write_fixtures()
+    # s1 also exercises the FULL portainer backend path (inspect + stacks +
+    # /file) when a local Portainer key is available (the DHost test host)
+    pt = ""
+    try:
+        for line in open("/root/.portainer_key"):
+            if line.startswith("ptr_"):
+                pt = line.strip()
+                break
+    except OSError:
+        pass
     mock = start_mock_auth()
-    s1 = start_server(PORT1, "admin")
+    s1 = start_server(PORT1, "admin",
+                      {"PORTAINER_URL": "http://127.0.0.1:9000",
+                       "PORTAINER_TOKEN": pt} if pt else None)
     s2 = None
     s_mut = None
     s_cfg = None
@@ -271,12 +283,35 @@ def main():
         st, b = req(PORT1, "/api/admin/image", id_admin)
         if st == 200:
             t("image endpoint returns real container info",
-              "tinyauth" in str(b.get("container_image")) and b.get("state") == "running"
-              and b.get("compose_image") is None and b.get("compose_note"),
+              "tinyauth" in str(b.get("container_image")) and b.get("state") == "running",
               f"{st} {b}")
+            t("compose image parsed via portainer /file endpoint",
+              isinstance(b.get("compose_image"), str)
+              and "tinyauth" in b.get("compose_image", ""), f"{st} {b}")
+            t("created is an epoch int (frontend fmtTime input)",
+              isinstance(b.get("created"), int) and b.get("created") > 10**9, f"{st} {b}")
         else:
             t("image endpoint graceful 502 without socket",
               st == 502 and "error" in b, f"{st} {b}")
+
+        # --- compose parser unit tests (pure function, no server needed) ---
+        sys.path.insert(0, BACKEND)
+        import app as appmod
+        sample = ('version: "3.8"\n\nservices:\n  tinyauth:\n'
+                  "    image: ghcr.io/tinyauthapp/tinyauth:v5.2.0\n"
+                  "    restart: unless-stopped\n"
+                  "  other:\n    image: nginx:1.27\n")
+        t("parser: standard compose block",
+          appmod.parse_service_image(sample, "tinyauth")
+          == "ghcr.io/tinyauthapp/tinyauth:v5.2.0")
+        t("parser: quoted image value",
+          appmod.parse_service_image('services:\n  a:\n    image: "repo/app:1.0"\n', "a")
+          == "repo/app:1.0")
+        t("parser: missing service -> None",
+          appmod.parse_service_image(sample, "ghost") is None)
+        t("parser: trailing comment ignored",
+          appmod.parse_service_image("services:\n  a:\n    image: app:1 # pin\n", "a")
+          == "app:1")
 
         # ============ milestone 2: mutations ============
         # TINYAUTH_CONTAINER points at a non-existent container so restarts

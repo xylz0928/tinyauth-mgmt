@@ -28,7 +28,7 @@ import time
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 import bcrypt
 import yaml
@@ -156,6 +156,26 @@ def fmt_ts(epoch):
     return datetime.fromtimestamp(int(epoch)).strftime("%F %T")
 
 
+def _iso_epoch(value):
+    """Docker API Created (ISO8601 / epoch) -> unix epoch seconds (int|None).
+
+    The frontend formats all timestamps from epoch seconds (fmtTime), so the
+    stack view's `created` must be an int — an ISO string rendered as an
+    epoch produced NaN-NaN-NaN.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    try:
+        s = str(value)
+        if s.isdigit():
+            return int(s)
+        return int(datetime.fromisoformat(s[:19]).replace(tzinfo=timezone.utc).timestamp())
+    except (ValueError, TypeError, OSError):
+        return None
+
+
 def compute_session(row, now, expiry, maxlife):
     created = int(row["created_at"] or 0)
     exp = int(row["expiry"] or 0)
@@ -252,8 +272,12 @@ def portainer_compose_image(api, project, service):
         stack = next((s for s in stacks if s.get("Name") == project), None)
         if not stack:
             return None, f"no portainer stack named {project!r}"
-        detail = api(f"/api/stacks/{stack['Id']}")
-        text = detail.get("composeFile") or ""
+        # Portainer2.45 no longer returns composeFile in the stack detail —
+        # the file lives behind GET /api/stacks/{id}/file (StackFileContent)
+        file_resp = api(f"/api/stacks/{stack['Id']}/file")
+        text = file_resp.get("StackFileContent") or ""
+        if not text:
+            return None, "stack file empty/unavailable via portainer api"
         img = parse_service_image(text, service or "")
         if not img:
             return None, "image entry not found in compose file"
@@ -580,7 +604,7 @@ def admin_image():
         service=service,
         state=(info.get("State") or {}).get("Status"),
         health=((info.get("State") or {}).get("Health") or {}).get("Status"),
-        created=(info.get("Created") or "")[:19].replace("T", " "),
+        created=_iso_epoch(info.get("Created")),
     )
 
 
