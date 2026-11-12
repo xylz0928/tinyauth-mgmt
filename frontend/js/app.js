@@ -166,9 +166,10 @@
 	function confirmModal(o) {
 		return new Promise(function (resolve) {
 			var typedHtml = o.typed
-				? "<div class=\"field\"><span class=\"field-label\">Type <strong>" +
+				? "<div class=\"field\"><span class=\"field-label\">Type <strong class=\"exact\">" +
 				  esc(o.typed) + "</strong> to confirm</span>" +
-				  "<input type=\"text\" id=\"confirm-typed\" autocomplete=\"off\" spellcheck=\"false\"></div>"
+				  "<input type=\"text\" id=\"confirm-typed\" autocomplete=\"off\" spellcheck=\"false\" " +
+				  "placeholder=\"" + esc(o.typed) + "\"></div>"
 				: "";
 			var m;
 			m = modal({
