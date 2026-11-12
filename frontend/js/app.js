@@ -375,7 +375,9 @@
 	/* ---- users (admin) ---- */
 
 	function adminTotpBase(user) {
-		return "/api/admin/users/" + encodeURIComponent(user) + "/totp";
+		// NOTE: returns the RESOURCE base only — totpModal()/removeTotp()
+		// append "/totp" themselves (a doubled suffix caused the405 bug).
+		return "/api/admin/users/" + encodeURIComponent(user);
 	}
 
 	function viewUsers() {

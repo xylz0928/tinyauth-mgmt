@@ -470,6 +470,13 @@ def main():
         t("cookie mode: non-admin session -> admin api 403",
           st == 403, f"{st} {b}")
 
+        # --- static UI guard: base/suffix consistency (the405 bug class) ---
+        appjs = open(os.path.join(REPO, "frontend/js/app.js")).read()
+        m = re.search(r"function adminTotpBase\(user\)\s*\{[^}]*\}", appjs)
+        t("adminTotpBase must not pre-append the suffix (UI405 guard)",
+          bool(m) and '+ "/totp"' not in m.group(0),
+          (m.group(0) if m else "adminTotpBase not found")[:160])
+
         # --- fail-closed: ADMIN_USERS unset ---
         s2 = start_server(PORT2, "")
         st, b = req(PORT2, "/api/me", {"Remote-User": "admin", **GW})
