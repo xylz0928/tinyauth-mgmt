@@ -600,7 +600,7 @@ table.data tbody tr:last-child td { border-bottom: none; }
 	display: flex;
 	align-items: flex-start;
 	gap: 14px;
-	padding: 10px 2px;
+	padding:14px 4px;
 	border-bottom: 1px solid var(--border-color-low);
 }
 .session-item:last-child { border-bottom: none; }
@@ -612,7 +612,8 @@ table.data tbody tr:last-child td { border-bottom: none; }
 	min-width: 0;
 	display: flex;
 	flex-wrap: wrap;
-	gap: 6px 18px;
+	justify-content: space-between;
+	gap:8px 28px;
 	align-items: center;
 }
 
@@ -637,26 +638,34 @@ table.data tbody tr:last-child td { border-bottom: none; }
 }
 .s-flags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 
-@media (max-width: 768px) {
+@media (max-width:768px) {
+	/* four-row / three-column card:
+	   uuid spans all4 rows; col2 = [USER PROVIDER FLAGS | CREATED | EXPIRES
+	   | REMAINING]; col3 = STATUS (rows1-2) + Kick (rows3-4) */
 	.session-item {
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
-		gap: 10px;
-		align-items: start;
+		display:grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		grid-template-areas:
+			"uuid l1 status"
+			"uuid cr status"
+			"uuid ex kick"
+			"uuid rm kick";
+		gap:8px 12px;
+		align-items:stretch;
 	}
 	.s-uuid {
-		display: inline-block;
-		grid-column: 1;
-		align-self: center;
+		display:inline-block;
+		grid-area:uuid;
+		align-self:center;
 	}
-	.s-body {
-		grid-column: 2;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 8px;
-	}
-	.s-line { gap: 6px 12px; }
-	.s-val { white-space: normal; }
+	.s-body { display:contents; }        /* children join the item grid */
+	.s-l1 { grid-area:l1; }
+	.cell-created { grid-area:cr; }
+	.cell-expires { grid-area:ex; }
+	.cell-remaining { grid-area:rm; }
+	.s-status { grid-area:status; align-self:center; }
+	.s-kick { grid-area:kick; align-self:center; justify-self:start; }
+	.s-val { white-space:normal; }
 }
 
 /* --------------------------------------------------------------------------

@@ -522,8 +522,9 @@
 					s.uuid.toLowerCase().indexOf(q) !== -1;
 			}) : all;
 
-			function field(label, valueHtml) {
-				return "<span class=\"s-field\"><span class=\"field-label\">" +
+			function field(label, valueHtml, extra) {
+				return "<span class=\"s-field" + (extra ? " " + extra : "") +
+					"\"><span class=\"field-label\">" +
 					label + "</span><span class=\"s-val\">" + valueHtml + "</span></span>";
 			}
 			var items = list.map(function (s) {
@@ -535,22 +536,20 @@
 				return "<div class=\"session-item\">" +
 					"<span class=\"s-uuid chip uuid-chip\">" + fmtUuid(s.uuid) + "</span>" +
 					"<div class=\"s-body\">" +
-						"<div class=\"s-line\">" +
+						"<div class=\"s-line s-l1\">" +
 							field(t("f.user"), "<strong>" + esc(s.username) + "</strong>") +
 							field(t("f.provider"), esc(s.provider)) +
 							field(t("f.flags"), flags || "—") +
 						"</div>" +
-						"<div class=\"s-line\">" +
-							field(t("f.created"), esc(fmtTime(s.created_at))) +
-							field(t("f.expires"), esc(fmtTime(s.expires_at))) +
-							field(t("f.remaining"), esc(fmtRemaining(s.remaining))) +
-						"</div>" +
-						"<div class=\"s-line\">" +
-							field(t("f.status"),
-								"<span class=\"badge " + cls + "\">" + esc(st) + "</span>") +
+						field(t("f.created"), esc(fmtTime(s.created_at)), "cell-created") +
+						field(t("f.expires"), esc(fmtTime(s.expires_at)), "cell-expires") +
+						field(t("f.remaining"), esc(fmtRemaining(s.remaining)), "cell-remaining") +
+						field(t("f.status"),
+							"<span class=\"badge " + cls + "\">" + esc(st) + "</span>",
+							"s-status") +
+						"<span class=\"s-field s-kick\">" +
 							"<button class=\"btn small danger\" data-kick=\"" + esc(s.username) + "\">" +
-								t("btn.kick") + "</button>" +
-						"</div>" +
+							t("btn.kick") + "</button></span>" +
 					"</div>" +
 				"</div>";
 			}).join("");
