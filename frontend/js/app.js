@@ -411,12 +411,14 @@
 		api("/api/admin/users").then(function (data) {
 			var rows = data.users.map(function (u) {
 				return "<tr>" +
-					"<td><strong>" + esc(u.username) + "</strong></td>" +
-					"<td>" + (u.has_totp
+					"<td data-label=\"" + esc(t("th.username")) + "\"><strong>" +
+						esc(u.username) + "</strong></td>" +
+					"<td data-label=\"" + esc(t("th.totp")) + "\">" + (u.has_totp
 						? "<span class=\"badge primary\">" + t("badge.totp") + "</span>"
 						: "<span class=\"badge\">" + t("badge.no_totp") + "</span>") + "</td>" +
-					"<td>" + esc(u.active_sessions) + " / " + esc(u.total_sessions) + "</td>" +
-					"<td><div class=\"actions\">" +
+					"<td data-label=\"" + esc(t("th.sessions_short")) + "\">" +
+						esc(u.active_sessions) + " / " + esc(u.total_sessions) + "</td>" +
+					"<td class=\"actions-td\"><div class=\"actions\">" +
 						"<button class=\"btn small\" data-act=\"pw\" data-u=\"" + esc(u.username) + "\">" +
 							t("btn.password") + "</button>" +
 						"<button class=\"btn small\" data-act=\"totp\" data-u=\"" + esc(u.username) +
@@ -431,7 +433,7 @@
 				"  <div class=\"toolbar\"><h2 class=\"card-title grow\">" + t("users.title") + "</h2>" +
 				"    <button class=\"btn primary small\" id=\"users-new\">" + t("users.new") + "</button></div>" +
 				"  <p class=\"card-desc\">" + esc(t("users.desc")) + "</p>" +
-				"  <div class=\"table-wrap\"><table class=\"data\">" +
+				"  <div class=\"table-wrap\"><table class=\"data users-table\">" +
 				"    <thead><tr><th>" + t("th.username") + "</th><th>" + t("th.totp") + "</th>" +
 				"    <th>" + t("th.sessions") + "</th><th>" + t("th.actions") + "</th></tr></thead>" +
 				"    <tbody>" + (rows || "<tr><td colspan=\"4\" class=\"empty\">" +
