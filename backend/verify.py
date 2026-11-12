@@ -325,6 +325,9 @@ def main():
         t("time endpoint: display_tz present (never hardcoded)",
           st == 200 and isinstance(b.get("display_tz"), str) and b["display_tz"],
           f"{st} {b}")
+        t("time endpoint: ntp carries cache age (projection transparency)",
+          st == 200 and ("age" in b.get("ntp", {}) or b.get("ntp", {}).get("error")),
+          f"{st} {b}")
 
         # ============ milestone 2: mutations ============
         # TINYAUTH_CONTAINER points at a non-existent container so restarts

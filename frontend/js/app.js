@@ -370,10 +370,7 @@
 	}
 
 	function refresh() {
-		if (window.__tmTimeTick) {
-			clearInterval(window.__tmTimeTick);
-			window.__tmTimeTick = null;
-		}
+		stopTimeCycle();   // never poll the time sources in the background
 		if (currentView) viewsRender[currentView]();
 	}
 
@@ -590,7 +587,11 @@
 
 	/* ---- stack (admin) ---- */
 
-	/* ---- time sources card (Stack tab) ---- */
+	/* ---- time sources card (Stack tab) ----
+	   One snapshot every30s: browser + three server sources are fetched and
+	   rendered TOGETHER, so offsets stay constant between refreshes (no
+	   growing drift). The cycle stops while the tab is hidden or the view
+	   is left — nothing keeps polling in the background. */
 	function fmtTimeTz(epoch, tz) {
 		try {
 			return new Intl.DateTimeFormat("sv-SE", {
@@ -615,17 +616,21 @@
 				"<td class=\"t-off\">—</td>" +
 				"<td>" + esc(detail) + "</td></tr>";
 		}
+		var ntpDetail = t.ntp.error ? t.ntp.error :
+			("server: " + (t.ntp.server || "") +
+			 (typeof t.ntp.age === "number" && t.ntp.age >=1
+				? " · queried " + Math.round(t.ntp.age) + "s ago" : ""));
 		return "<h2 class=\"card-title\">Time</h2>" +
 			"<p class=\"card-desc\">Four sources · every row rendered in <strong>" +
-			esc(t.display_tz || "UTC") + "</strong> (tinyauth-mgmt's TZ, never " +
-			"hardcoded) · offsets vs this browser · drift &gt; 5s can break TOTP</p>" +
+			esc(t.display_tz || "UTC") + "</strong> (tinyauth-mgmt's TZ) · " +
+			"one snapshot every30s — polling stops while this tab or view is " +
+			"inactive · drift &gt; 5s can break TOTP</p>" +
 			"<div class=\"table-wrap\"><table class=\"data\"><thead><tr>" +
 			"<th>Source</th><th>Time</th><th>Offset vs browser</th><th>Detail</th>" +
 			"</tr></thead><tbody>" +
 			row("browser", "Browser (this device)", null,
-				"browser tz: " + (btz || "?") + " · ticks every second") +
-			row("ntp", "NTP", t.ntp.epoch,
-				t.ntp.error ? t.ntp.error : ("server: " + (t.ntp.server || ""))) +
+				"browser tz: " + (btz || "?") + " · reference") +
+			row("ntp", "NTP", t.ntp.epoch, ntpDetail) +
 			row("tinyauth", "tinyauth", t.tinyauth.epoch,
 				t.tinyauth.error ? t.tinyauth.error : "HTTP Date header") +
 			row("backend", "tinyauth-mgmt", t.backend.epoch,
@@ -633,43 +638,57 @@
 			"</tbody></table></div>";
 	}
 
-	function startTimeTick(tz) {
-		if (window.__tmTimeTick) clearInterval(window.__tmTimeTick);
-		function tick() {
-			var card = document.getElementById("time-card");
-			if (!card) {
-				clearInterval(window.__tmTimeTick);
-				window.__tmTimeTick = null;
+	function renderTimeRows(t) {
+		var card = document.getElementById("time-card");
+		if (!card) return;
+		var now = Date.now() /1000;          // browser value in THIS snapshot
+		var values = { browser: now, ntp: t.ntp.epoch,
+			tinyauth: t.tinyauth.epoch, backend: t.backend.epoch };
+		var tz = t.display_tz || "";
+		card.querySelectorAll("tr[data-src]").forEach(function (tr) {
+			var epoch = values[tr.dataset.src];
+			if (typeof epoch !== "number" || !isFinite(epoch)) return;
+			var timeCell = tr.querySelector(".t-time");
+			var offCell = tr.querySelector(".t-off");
+			timeCell.textContent = tz ? fmtTimeTz(epoch, tz) : fmtTime(epoch);
+			if (tr.dataset.src === "browser") { offCell.innerHTML = ""; return; }
+			var d = epoch - now;              // measured once per snapshot
+			var cls = Math.abs(d) <=1 ? "success" : (Math.abs(d) <=5 ? "warn" : "error");
+			offCell.innerHTML = "<span class=\"badge " + cls + "\">" +
+				(d >=0 ? "+" : "") + d.toFixed(1) + "s</span>";
+		});
+	}
+
+	function stopTimeCycle() {
+		if (window.__tmTimeCycle) {
+			clearInterval(window.__tmTimeCycle);
+			window.__tmTimeCycle = null;
+		}
+	}
+
+	function ensureTimeCycle() {
+		if (window.__tmTimeCycle) return;
+		window.__tmTimeCycle = setInterval(function () {
+			if (currentView !== "stack" || document.hidden) {
+				stopTimeCycle();
 				return;
 			}
-			var now = Date.now() / 1000;
-			card.querySelectorAll("tr[data-src]").forEach(function (tr) {
-				var src = tr.dataset.src;
-				var epoch = src === "browser" ? now : parseFloat(tr.dataset.epoch || "");
-				var timeCell = tr.querySelector(".t-time");
-				var offCell = tr.querySelector(".t-off");
-				if (!isFinite(epoch)) return;
-				timeCell.textContent = tz ? fmtTimeTz(epoch, tz) : fmtTime(epoch);
-				if (src === "browser") { offCell.innerHTML = ""; return; }
-				var d = epoch - now;
-				var cls = Math.abs(d) <=1 ? "success" : (Math.abs(d) <=5 ? "warn" : "error");
-				offCell.innerHTML = "<span class=\"badge " + cls + "\">" +
-					(d >=0 ? "+" : "") + d.toFixed(1) + "s</span>";
-			});
-		}
-		window.__tmTimeTick = setInterval(tick,1000);
-		tick();
+			loadTimeCard();
+		},30000);
 	}
 
 	function loadTimeCard() {
 		api("/api/admin/time").then(function (t) {
 			if (currentView !== "stack") return;   // navigated away meanwhile
+			var old = document.getElementById("time-card");
+			if (old) old.remove();
 			var card = document.createElement("div");
 			card.className = "card";
 			card.id = "time-card";
 			card.innerHTML = timeCardHtml(t);
 			$("view").appendChild(card);
-			startTimeTick(t.display_tz || "");
+			renderTimeRows(t);
+			ensureTimeCycle();
 		}).catch(function () { /* informational card */ });
 	}
 
@@ -803,6 +822,15 @@
 	function boot() {
 		var btn = $("theme-toggle");
 		btn.addEventListener("click", function () { window.__tmTheme.cycle(); });
+
+		// background tab = no polling; returning = one fresh snapshot + resume
+		document.addEventListener("visibilitychange", function () {
+			if (document.hidden) {
+				stopTimeCycle();
+			} else if (currentView === "stack" && document.getElementById("time-card")) {
+				loadTimeCard();
+			}
+		});
 
 		// version badge (ungated endpoint, shows even before identity resolves)
 		fetch("/api/health").then(function (r) { return r.json(); }).then(function (h) {

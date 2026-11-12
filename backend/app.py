@@ -986,17 +986,26 @@ def _ntp_time():
     cached = _NTP_CACHE["payload"]
     if cached:
         ttl = 60 if cached.get("epoch") is not None else 30
-        if now - _NTP_CACHE["at"] < ttl:
-            return dict(cached)
+        age = now - _NTP_CACHE["at"]
+        if age < ttl:
+            out = dict(cached)
+            out["age"] = round(age,1)
+            if out.get("epoch") is not None:
+                # project the cached reading forward so callers always see
+                # "NTP time NOW", never a stale snapshot (otherwise every
+                # refresh would show a fake drift up to the cache TTL)
+                out["epoch"] = round(out["epoch"] + age,3)
+            return out
     last_err = "no NTP servers configured"
     for srv in NTP_SERVERS:
         try:
-            payload = {"epoch": round(_sntp_query(srv),3), "server": srv, "error": None}
+            payload = {"epoch": round(_sntp_query(srv),3), "server": srv,
+                       "error": None, "age":0}
             _NTP_CACHE.update(at=now, payload=payload)
             return dict(payload)
         except Exception as exc:  # noqa: BLE001
             last_err = f"{srv}: {exc}"
-    payload = {"epoch": None, "server": None, "error": last_err}
+    payload = {"epoch": None, "server": None, "error": last_err, "age": 0}
     _NTP_CACHE.update(at=now, payload=payload)
     return dict(payload)
 
