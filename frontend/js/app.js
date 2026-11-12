@@ -624,62 +624,76 @@
 		}
 	}
 
-	function timeCardHtml(t) {
-		var btz = "";
-		try { btz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
-		function row(src, label, epoch, detail) {
-			var has = typeof epoch === "number" && isFinite(epoch);
-			return "<tr data-src=\"" + src + "\"" +
-				(has ? " data-epoch=\"" + epoch + "\"" : "") + ">" +
+	function timeCardFrame() {
+		function row(src, label) {
+			return "<tr data-src=\"" + src + "\">" +
 				"<td>" + label + "</td>" +
-				"<td class=\"t-time\">" + (has ? "…" : "—") + "</td>" +
+				"<td class=\"t-time\">…</td>" +
 				"<td class=\"t-off\">—</td>" +
-				"<td>" + esc(detail) + "</td></tr>";
+				"<td class=\"t-detail\">—</td></tr>";
 		}
-		var ntpDetail = t.ntp.error ? t.ntp.error :
-			("server: " + (t.ntp.server || "") +
-			 (typeof t.ntp.age === "number" && t.ntp.age >=1
-				? " · queried " + Math.round(t.ntp.age) + "s ago" : ""));
 		return "<h2 class=\"card-title\">Time</h2>" +
-			"<p class=\"card-desc\">Base timezone <span class=\"tag\">" +
-			esc(t.display_tz || "UTC") + "</span> " +
-			"<span class=\"field-hint\">(from " +
-			esc(t.display_tz_source === "TZ env" ? "tinyauth-mgmt's TZ env"
-				: t.display_tz_source || "default") + " · every row below " +
-			"renders in it)</span><br>" +
-			"one snapshot every30s — polling stops while this tab or view is " +
-			"inactive · drift &gt; 5s can break TOTP</p>" +
+			"<p class=\"card-desc\" id=\"time-desc\">" +
+			"<span class=\"spinner\"></span> loading time sources…</p>" +
 			"<div class=\"table-wrap\"><table class=\"data\"><thead><tr>" +
 			"<th>Source</th><th>Time</th><th>Offset vs browser</th><th>Detail</th>" +
 			"</tr></thead><tbody>" +
-			row("browser", "Browser (this device)", null,
-				"browser tz: " + (btz || "?") + " · reference") +
-			row("ntp", "NTP", t.ntp.epoch, ntpDetail) +
-			row("tinyauth", "tinyauth", t.tinyauth.epoch,
-				t.tinyauth.error ? t.tinyauth.error : "HTTP Date header") +
-			row("backend", "tinyauth-mgmt", t.backend.epoch,
-				"tz " + (t.backend.tz || "?") + " · " + (t.backend.local || "")) +
+			row("browser", "Browser (this device)") +
+			row("ntp", "NTP") +
+			row("tinyauth", "tinyauth") +
+			row("backend", "tinyauth-mgmt") +
 			"</tbody></table></div>";
 	}
 
-	function renderTimeRows(t) {
+	/* updates happen IN PLACE — the card frame is never destroyed, so the
+	   first load and the30s cycle never make the card disappear */
+	function updateTimeCard(t) {
 		var card = document.getElementById("time-card");
 		if (!card) return;
-		var now = Date.now() /1000;          // browser value in THIS snapshot
+		var tz = t.display_tz || "";
+		var desc = document.getElementById("time-desc");
+		if (desc) {
+			desc.innerHTML =
+				"Base timezone <span class=\"tag\">" + esc(tz || "UTC") + "</span> " +
+				"<span class=\"field-hint\">(from " +
+				esc(t.display_tz_source === "TZ env"
+					? "tinyauth-mgmt's TZ env" : t.display_tz_source || "default") +
+				" · every row below renders in it)</span><br>" +
+				"one snapshot every30s — polling stops while this tab or view is " +
+				"inactive · drift &gt; 5s can break TOTP";
+		}
+		var now = Date.now() / 1000;
 		var values = { browser: now, ntp: t.ntp.epoch,
 			tinyauth: t.tinyauth.epoch, backend: t.backend.epoch };
-		var tz = t.display_tz || "";
+		var btz = "";
+		try { btz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+		var details = {
+			browser: "browser tz: " + (btz || "?") + " · reference",
+			ntp: t.ntp.error ? t.ntp.error :
+				("server: " + (t.ntp.server || "") +
+				 (typeof t.ntp.age === "number" && t.ntp.age >= 1
+					? " · queried " + Math.round(t.ntp.age) + "s ago" : "")),
+			tinyauth: t.tinyauth.error ? t.tinyauth.error : "HTTP Date header",
+			backend: "tz " + (t.backend.tz || "?") + " · " + (t.backend.local || "")
+		};
 		card.querySelectorAll("tr[data-src]").forEach(function (tr) {
-			var epoch = values[tr.dataset.src];
-			if (typeof epoch !== "number" || !isFinite(epoch)) return;
+			var src = tr.dataset.src;
 			var timeCell = tr.querySelector(".t-time");
 			var offCell = tr.querySelector(".t-off");
+			var detCell = tr.querySelector(".t-detail");
+			if (detCell) detCell.innerHTML = esc(details[src] || "");
+			var epoch = values[src];
+			if (typeof epoch !== "number" || !isFinite(epoch)) {
+				timeCell.textContent = "—";
+				offCell.innerHTML = "";
+				return;
+			}
 			timeCell.textContent = tz ? fmtTimeTz(epoch, tz) : fmtTime(epoch);
-			if (tr.dataset.src === "browser") { offCell.innerHTML = ""; return; }
+			if (src === "browser") { offCell.innerHTML = ""; return; }
 			var d = epoch - now;              // measured once per snapshot
-			var cls = Math.abs(d) <=1 ? "success" : (Math.abs(d) <=5 ? "warn" : "error");
+			var cls = Math.abs(d) <= 1 ? "success" : (Math.abs(d) <= 5 ? "warn" : "error");
 			offCell.innerHTML = "<span class=\"badge " + cls + "\">" +
-				(d >=0 ? "+" : "") + d.toFixed(1) + "s</span>";
+				(d >= 0 ? "+" : "") + d.toFixed(1) + "s</span>";
 		});
 	}
 
@@ -702,18 +716,26 @@
 	}
 
 	function loadTimeCard() {
-		api("/api/admin/time").then(function (t) {
-			if (currentView !== "stack") return;   // navigated away meanwhile
-			var old = document.getElementById("time-card");
-			if (old) old.remove();
-			var card = document.createElement("div");
+		var card = document.getElementById("time-card");
+		if (!card) {
+			// frame FIRST — the card (loading state) is visible before the fetch
+			card = document.createElement("div");
 			card.className = "card";
 			card.id = "time-card";
-			card.innerHTML = timeCardHtml(t);
+			card.innerHTML = timeCardFrame();
 			$("view").appendChild(card);
-			renderTimeRows(t);
-			ensureTimeCycle();
-		}).catch(function () { /* informational card */ });
+		}
+		api("/api/admin/time").then(function (t) {
+			if (currentView !== "stack") return;   // navigated away meanwhile
+			updateTimeCard(t);                     // in-place: frame preserved
+		}).catch(function () {
+			var desc = document.getElementById("time-desc");
+			if (desc) {
+				desc.innerHTML = "<span class=\"error-box\">time sources " +
+					"unavailable — will retry with the next snapshot</span>";
+			}
+		});
+		ensureTimeCycle();   // cycle also retries after a failed fetch
 	}
 
 	function viewStack() {
