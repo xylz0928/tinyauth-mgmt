@@ -27,13 +27,13 @@ services:
       # - DOMAIN=.example.com
     volumes:
       - tinyauth-data:/data
+      - /etc/localtime:/etc/localtime:ro          # host timezone, read-only
     networks:
       - webs
 
   tinyauth-mgmt:
-    # until the image is published, build it locally and use your local tag:
-    #   docker build -t tinyauth-mgmt:v0.1 .
-    image: ghcr.io/xylz0928/tinyauth-mgmt:latest
+    # published at ghcr.io — or build locally: docker build -t tinyauth-mgmt:dev .
+    image: ghcr.io/xylz0928/tinyauth-mgmt:latest   # or pin a version: :v2.1
     container_name: tinyauth-mgmt
     restart: unless-stopped
     environment:
@@ -53,9 +53,11 @@ services:
       # - PORTAINER_TOKEN=your-portainer-api-key
       # - PORTAINER_ENDPOINT=local
       # - TINYAUTH_HEALTH_URL=http://tinyauth:3002/api/healthz
-      # - TZ=Asia/Shanghai
+      # - TZ=Asia/Shanghai                    # Time-card base timezone (IANA name)
+      # - NTP_SERVERS=time.windows.com,ntp.aliyun.com,pool.ntp.org
     volumes:
       - tinyauth-data:/data                        # same key as tinyauth → same volume
+      - /etc/localtime:/etc/localtime:ro           # host timezone, read-only
       - /var/run/docker.sock:/var/run/docker.sock   # restart / inspect (see security-model.md)
     networks:
       - webs
