@@ -370,6 +370,10 @@
 	}
 
 	function refresh() {
+		if (window.__tmTimeTick) {
+			clearInterval(window.__tmTimeTick);
+			window.__tmTimeTick = null;
+		}
 		if (currentView) viewsRender[currentView]();
 	}
 
@@ -586,6 +590,89 @@
 
 	/* ---- stack (admin) ---- */
 
+	/* ---- time sources card (Stack tab) ---- */
+	function fmtTimeTz(epoch, tz) {
+		try {
+			return new Intl.DateTimeFormat("sv-SE", {
+				timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+				hour: "2-digit", minute: "2-digit", second: "2-digit",
+				hourCycle: "h23"
+			}).format(new Date(epoch *1000));
+		} catch (e) {
+			return fmtTime(epoch);   // unknown tz: fall back to browser local
+		}
+	}
+
+	function timeCardHtml(t) {
+		var btz = "";
+		try { btz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+		function row(src, label, epoch, detail) {
+			var has = typeof epoch === "number" && isFinite(epoch);
+			return "<tr data-src=\"" + src + "\"" +
+				(has ? " data-epoch=\"" + epoch + "\"" : "") + ">" +
+				"<td>" + label + "</td>" +
+				"<td class=\"t-time\">" + (has ? "…" : "—") + "</td>" +
+				"<td class=\"t-off\">—</td>" +
+				"<td>" + esc(detail) + "</td></tr>";
+		}
+		return "<h2 class=\"card-title\">Time</h2>" +
+			"<p class=\"card-desc\">Four sources · every row rendered in <strong>" +
+			esc(t.display_tz || "UTC") + "</strong> (tinyauth-mgmt's TZ, never " +
+			"hardcoded) · offsets vs this browser · drift &gt; 5s can break TOTP</p>" +
+			"<div class=\"table-wrap\"><table class=\"data\"><thead><tr>" +
+			"<th>Source</th><th>Time</th><th>Offset vs browser</th><th>Detail</th>" +
+			"</tr></thead><tbody>" +
+			row("browser", "Browser (this device)", null,
+				"browser tz: " + (btz || "?") + " · ticks every second") +
+			row("ntp", "NTP", t.ntp.epoch,
+				t.ntp.error ? t.ntp.error : ("server: " + (t.ntp.server || ""))) +
+			row("tinyauth", "tinyauth", t.tinyauth.epoch,
+				t.tinyauth.error ? t.tinyauth.error : "HTTP Date header") +
+			row("backend", "tinyauth-mgmt", t.backend.epoch,
+				"tz " + (t.backend.tz || "?") + " · " + (t.backend.local || "")) +
+			"</tbody></table></div>";
+	}
+
+	function startTimeTick(tz) {
+		if (window.__tmTimeTick) clearInterval(window.__tmTimeTick);
+		function tick() {
+			var card = document.getElementById("time-card");
+			if (!card) {
+				clearInterval(window.__tmTimeTick);
+				window.__tmTimeTick = null;
+				return;
+			}
+			var now = Date.now() / 1000;
+			card.querySelectorAll("tr[data-src]").forEach(function (tr) {
+				var src = tr.dataset.src;
+				var epoch = src === "browser" ? now : parseFloat(tr.dataset.epoch || "");
+				var timeCell = tr.querySelector(".t-time");
+				var offCell = tr.querySelector(".t-off");
+				if (!isFinite(epoch)) return;
+				timeCell.textContent = tz ? fmtTimeTz(epoch, tz) : fmtTime(epoch);
+				if (src === "browser") { offCell.innerHTML = ""; return; }
+				var d = epoch - now;
+				var cls = Math.abs(d) <=1 ? "success" : (Math.abs(d) <=5 ? "warn" : "error");
+				offCell.innerHTML = "<span class=\"badge " + cls + "\">" +
+					(d >=0 ? "+" : "") + d.toFixed(1) + "s</span>";
+			});
+		}
+		window.__tmTimeTick = setInterval(tick,1000);
+		tick();
+	}
+
+	function loadTimeCard() {
+		api("/api/admin/time").then(function (t) {
+			if (currentView !== "stack") return;   // navigated away meanwhile
+			var card = document.createElement("div");
+			card.className = "card";
+			card.id = "time-card";
+			card.innerHTML = timeCardHtml(t);
+			$("view").appendChild(card);
+			startTimeTick(t.display_tz || "");
+		}).catch(function () { /* informational card */ });
+	}
+
 	function viewStack() {
 		var v = $("view");
 		v.innerHTML = "<div class=\"card\"><div class=\"empty\"><span class=\"spinner\"></span> loading stack info…</div></div>";
@@ -633,6 +720,7 @@
 					refresh();
 				} catch (e) { toast(e.message || "restart failed", "error"); }
 			});
+			loadTimeCard();
 		}).catch(function (err) { v.innerHTML = errorBox(err); });
 	}
 

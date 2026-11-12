@@ -57,6 +57,9 @@ TINYAUTH_HEALTH_URL = os.environ.get("TINYAUTH_HEALTH_URL", "http://tinyauth:300
 TINYAUTH_AUTH_URL = os.environ.get("TINYAUTH_AUTH_URL", "http://tinyauth:3002/api/auth/nginx")
 # baked into the image at build time (--build-arg APP_VERSION=vX.Y)
 APP_VERSION = os.environ.get("APP_VERSION", "")
+# trusted NTP servers for the Stack "Time" card (SNTP/UDP123, tried in order)
+NTP_SERVERS = [s.strip() for s in os.environ.get(
+    "NTP_SERVERS", "time.windows.com,ntp.aliyun.com,pool.ntp.org").split(",") if s.strip()]
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 # works in both layouts: flat container (/app/frontend) and repo (../frontend)
@@ -950,6 +953,98 @@ def restart_container():
                    waited_s=round(time.time() - started, 1),
                    warning=(None if healthy else
                             "container restarted but health check has not passed yet"))
+
+
+# ---- time sources (Stack "Time" card): browser | NTP | tinyauth | self ----
+_NTP_CACHE = {"at": 0.0, "payload": None}
+
+
+def _sntp_query(server, timeout=2.0):
+    """Minimal SNTP client (RFC5905 client mode, no dependencies)."""
+    addr = socket.getaddrinfo(server, 123, socket.AF_INET, socket.SOCK_DGRAM)[0][4]
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.settimeout(timeout)
+        t0 = time.time()
+        sock.sendto(b"\x1b" + b"\x00" * 47, addr)   # LI=0 VN=4 Mode=3 (client)
+        data, _ = sock.recvfrom(48)
+        t1 = time.time()
+    finally:
+        sock.close()
+    if len(data) < 48:
+        raise RuntimeError("short SNTP reply")
+    secs = struct.unpack("!I", data[40:44])[0]
+    frac = struct.unpack("!I", data[44:48])[0]
+    unix = secs + frac / 2**32 -2208988800
+    if abs(unix - (t0 + t1) / 2) > 86400:
+        raise RuntimeError("implausible server time")
+    return unix
+
+
+def _ntp_time():
+    now = time.time()
+    cached = _NTP_CACHE["payload"]
+    if cached:
+        ttl = 60 if cached.get("epoch") is not None else 30
+        if now - _NTP_CACHE["at"] < ttl:
+            return dict(cached)
+    last_err = "no NTP servers configured"
+    for srv in NTP_SERVERS:
+        try:
+            payload = {"epoch": round(_sntp_query(srv),3), "server": srv, "error": None}
+            _NTP_CACHE.update(at=now, payload=payload)
+            return dict(payload)
+        except Exception as exc:  # noqa: BLE001
+            last_err = f"{srv}: {exc}"
+    payload = {"epoch": None, "server": None, "error": last_err}
+    _NTP_CACHE.update(at=now, payload=payload)
+    return dict(payload)
+
+
+def _tinyauth_time():
+    """tinyauth's own clock = the Date header of any of its HTTP responses."""
+    try:
+        with urllib.request.urlopen(TINYAUTH_HEALTH_URL, timeout=4) as resp:
+            date_hdr = resp.headers.get("Date")
+        from email.utils import parsedate_to_datetime
+        epoch = parsedate_to_datetime(date_hdr).timestamp()
+        return {"epoch": round(epoch,3), "source": TINYAUTH_HEALTH_URL, "error": None}
+    except Exception as exc:  # noqa: BLE001
+        return {"epoch": None, "source": TINYAUTH_HEALTH_URL, "error": str(exc)}
+
+
+def _backend_time():
+    return {"epoch": round(time.time(),3),
+            "tz": (time.tzname[0] if time.tzname else ""),
+            "local": datetime.now().strftime("%F %T"),
+            "error": None}
+
+
+def _display_tz():
+    """IANA timezone the Time card must render everything in.
+
+    Priority: TZ env (what the operator configured in compose) -> the
+    /etc/localtime symlink (read-only host mount) -> raw TZ -> UTC.
+    Never hardcoded — other deployments set their own TZ.
+    """
+    tz = os.environ.get("TZ", "").lstrip(":")
+    if tz and "/" in tz:
+        return tz
+    try:
+        target = os.readlink("/etc/localtime")
+        marker = "/usr/share/zoneinfo/"
+        if marker in target:
+            return target.split(marker,1)[1]
+    except OSError:
+        pass
+    return tz or "UTC"
+
+
+@admin_bp.get("/time")
+def admin_time():
+    return jsonify(backend=_backend_time(), tinyauth=_tinyauth_time(),
+                   ntp=_ntp_time(), display_tz=_display_tz(),
+                   generated_at=round(time.time(),3))
 
 
 # ---- self-service (username is ALWAYS taken from the identity chain) ----

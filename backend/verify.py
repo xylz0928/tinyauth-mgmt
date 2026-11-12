@@ -313,6 +313,19 @@ def main():
           appmod.parse_service_image("services:\n  a:\n    image: app:1 # pin\n", "a")
           == "app:1")
 
+        # --- time sources endpoint ---
+        st, b = req(PORT1, "/api/admin/time", id_admin)
+        t("time endpoint: backend epoch matches host clock",
+          st == 200 and isinstance(b.get("backend", {}).get("epoch"), (int, float))
+          and abs(b["backend"]["epoch"] - time.time()) <5, f"{st} {b}")
+        t("time endpoint: tinyauth/ntp each report epoch or error",
+          st == 200 and all(
+              (b.get(k, {}).get("epoch") is not None) or b.get(k, {}).get("error")
+              for k in ("tinyauth", "ntp")), f"{st} {b}")
+        t("time endpoint: display_tz present (never hardcoded)",
+          st == 200 and isinstance(b.get("display_tz"), str) and b["display_tz"],
+          f"{st} {b}")
+
         # ============ milestone 2: mutations ============
         # TINYAUTH_CONTAINER points at a non-existent container so restarts
         # can NEVER touch the real tinyauth running on this host.
