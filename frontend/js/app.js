@@ -413,12 +413,12 @@
 						? "<span class=\"badge primary\">TOTP</span>"
 						: "<span class=\"badge\">no totp</span>") + "</td>" +
 					"<td>" + esc(u.active_sessions) + " / " + esc(u.total_sessions) + "</td>" +
-					"<td style=\"white-space:nowrap\">" +
-						"<button class=\"btn small\" data-act=\"pw\" data-u=\"" + esc(u.username) + "\">Password</button> " +
+					"<td><div class=\"actions\">" +
+						"<button class=\"btn small\" data-act=\"pw\" data-u=\"" + esc(u.username) + "\">Password</button>" +
 						"<button class=\"btn small\" data-act=\"totp\" data-u=\"" + esc(u.username) +
-							"\" data-has=\"" + (u.has_totp ? "1" : "0") + "\">TOTP</button> " +
+							"\" data-has=\"" + (u.has_totp ? "1" : "0") + "\">TOTP</button>" +
 						"<button class=\"btn small danger\" data-act=\"del\" data-u=\"" + esc(u.username) + "\">Delete</button>" +
-					"</td>" +
+					"</div></td>" +
 					"</tr>";
 			}).join("");
 			v.innerHTML =
@@ -517,23 +517,35 @@
 					s.uuid.toLowerCase().indexOf(q) !== -1;
 			}) : all;
 
-			var rows = list.map(function (s) {
+			function field(label, valueHtml) {
+				return "<span class=\"s-field\"><span class=\"field-label\">" +
+					label + "</span><span class=\"s-val\">" + valueHtml + "</span></span>";
+			}
+			var items = list.map(function (s) {
 				var st = s.status;
 				var cls = st === "active" ? "success" : (st === "expired" ? "error" : "warn");
 				var flags = (s.flags || []).map(function (f) {
-					return "<span class=\"tag\">" + esc(f) + "</span> ";
-				}).join("");
-				return "<tr>" +
-					"<td><span class=\"chip uuid-chip\">" + fmtUuid(s.uuid) + "</span></td>" +
-					"<td><strong>" + esc(s.username) + "</strong></td>" +
-					"<td>" + esc(s.provider) + "</td>" +
-					"<td>" + esc(fmtTime(s.created_at)) + "</td>" +
-					"<td>" + esc(fmtTime(s.expires_at)) + "</td>" +
-					"<td>" + esc(fmtRemaining(s.remaining)) + "</td>" +
-					"<td><span class=\"badge " + cls + "\">" + esc(st) + "</span></td>" +
-					"<td>" + flags + "</td>" +
-					"<td><button class=\"btn small danger\" data-kick=\"" + esc(s.username) + "\">Kick</button></td>" +
-					"</tr>";
+					return "<span class=\"tag\">" + esc(f) + "</span>";
+				}).join(" ");
+				return "<div class=\"session-item\">" +
+					"<span class=\"s-uuid chip uuid-chip\">" + fmtUuid(s.uuid) + "</span>" +
+					"<div class=\"s-body\">" +
+						"<div class=\"s-line\">" +
+							field("User", "<strong>" + esc(s.username) + "</strong>") +
+							field("Provider", esc(s.provider)) +
+							field("Flags", flags || "—") +
+						"</div>" +
+						"<div class=\"s-line\">" +
+							field("Created", esc(fmtTime(s.created_at))) +
+							field("Expires", esc(fmtTime(s.expires_at))) +
+							field("Remaining", esc(fmtRemaining(s.remaining))) +
+						"</div>" +
+						"<div class=\"s-line\">" +
+							field("Status", "<span class=\"badge " + cls + "\">" + esc(st) + "</span>") +
+							"<button class=\"btn small danger\" data-kick=\"" + esc(s.username) + "\">Kick</button>" +
+						"</div>" +
+					"</div>" +
+				"</div>";
 			}).join("");
 
 			v.innerHTML =
@@ -550,12 +562,9 @@
 				"    <input type=\"search\" id=\"sess-filter\" placeholder=\"filter by username or uuid\" value=\"" +
 				esc(sessionFilter) + "\">" +
 				"  </div>" +
-				"  <div class=\"table-wrap\"><table class=\"data\">" +
-				"    <thead><tr><th>UUID</th><th>User</th><th>Provider</th>" +
-				"    <th>Created</th><th>Expires</th><th>Remaining</th><th>Status</th>" +
-				"    <th>Flags</th><th></th></tr></thead>" +
-				"    <tbody>" + (rows || "<tr><td colspan=\"9\" class=\"empty\">no sessions match</td></tr>") + "</tbody>" +
-				"  </table></div>" +
+				"  <div class=\"session-list\">" +
+				(items || "<div class=\"empty\">no sessions match</div>") +
+				"  </div>" +
 				"</div>";
 
 			$("sess-refresh").addEventListener("click", viewSessions);

@@ -372,7 +372,7 @@ table.data th {
 	color: var(--field-label-color);
 	background: var(--background-color-medium);
 	padding: 9px 12px;
-	white-space: nowrap;
+	white-space: normal;
 	border-bottom: 1px solid var(--border-color-low);
 	position: sticky;
 	top: 0;
@@ -575,6 +575,89 @@ table.data tbody tr:last-child td { border-bottom: none; }
 .kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 14px; font-size: 12.5px; }
 .kv dt { color: var(--text-color-low); }
 .kv dd { margin: 0; font-family: var(--font-mono); font-size: 12px; color: var(--text-color-high); word-break: break-all; }
+
+/* --------------------------------------------------------------------------
+   Actions cell (users table): buttons wrap as units when width is short
+   -------------------------------------------------------------------------- */
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: center;
+}
+
+/* --------------------------------------------------------------------------
+   Sessions: responsive item cards
+   wide  -> one horizontal strip: USER PROVIDER FLAGS | CREATED EXPIRES
+            REMAINING | STATUS Kick   (uuid hidden)
+   narrow -> uuid block on the left (wraps, so it is tall) + three lines:
+            L1 USER PROVIDER FLAGS / L2 CREATED EXPIRES REMAINING /
+            L3 STATUS Kick
+   -------------------------------------------------------------------------- */
+.session-list { display: flex; flex-direction: column; }
+
+.session-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	padding: 10px 2px;
+	border-bottom: 1px solid var(--border-color-low);
+}
+.session-item:last-child { border-bottom: none; }
+
+.s-uuid { display: none; }
+
+.s-body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+	align-items: center;
+}
+
+.s-line {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 14px;
+	align-items: center;
+}
+
+.s-field {
+	display: inline-flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+.s-field .field-label { font-size: 10px; }
+.s-val {
+	font-size: 12.5px;
+	color: var(--text-color-high);
+	white-space: nowrap;
+}
+.s-flags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+
+@media (max-width: 768px) {
+	.session-item {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		gap: 10px;
+		align-items: start;
+	}
+	.s-uuid {
+		display: inline-block;
+		grid-column: 1;
+		align-self: center;
+	}
+	.s-body {
+		grid-column: 2;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 8px;
+	}
+	.s-line { gap: 6px 12px; }
+	.s-val { white-space: normal; }
+}
 
 /* --------------------------------------------------------------------------
    Responsive
