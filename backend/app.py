@@ -527,7 +527,17 @@ def admin_image():
 # (atomic replace, .bak backup, post-check, $$ unescape, TOTP field handling)
 # --------------------------------------------------------------------------
 def users_file_path():
-    return session_params()["users_file"]
+    configured = session_params()["users_file"]
+    if os.path.exists(configured):
+        return configured
+    # Container layout safety net: the config may reference a path that only
+    # exists inside the tinyauth container; we mount the same volume at
+    # TINYAUTH_DATA_DIR, so fall back to the file's basename there
+    # (same semantics as the CLI's TINYAUTH_DATA_DIR override).
+    alt = os.path.join(DATA_DIR, os.path.basename(configured))
+    if os.path.exists(alt):
+        return alt
+    return configured
 
 
 def _read_text(path):
