@@ -1,0 +1,8 @@
+.env
+*.log
+__pycache__/
+node_modules/
+dist/
+.idea/
+.vscode/
+*.swp

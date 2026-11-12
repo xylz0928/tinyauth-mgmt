@@ -1,0 +1,70 @@
+# tinyauth-mgmt behind nginx (forward-auth via tinyauth)
+#
+# Adjust server_name, certificates and upstream names to your environment.
+# Modelled on the standard tinyauth + nginx auth_request pattern, with two
+# additions for the management console: the identity chain and the gateway token.
+
+server {
+    server_name admin.example.com;
+    listen 443 ssl;
+    http2 on;
+
+    ssl_certificate     /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
+
+    error_page 497 https://$host:$server_port$request_uri;
+    client_max_body_size 50M;
+
+    location / {
+        auth_request /auth;
+        auth_request_set $redirect_url $upstream_http_x_tinyauth_location;
+        error_page 401 403 =302 $redirect_url;
+
+        # ------------------------------------------------------------------
+        # Identity chain (IMPORTANT)
+        #
+        # tinyauth returns the logged-in username in the `Remote-User` header.
+        # NOTE: it does NOT set `X-Tinyauth-User`. Configs that read
+        #   auth_request_set $user $upstream_http_x_tinyauth_user;
+        # silently forward an EMPTY identity — the console would then reject
+        # every request with 401. Use $upstream_http_remote_user instead.
+        # ------------------------------------------------------------------
+        auth_request_set $tinyauth_user $upstream_http_remote_user;
+        proxy_set_header X-Tinyauth-User $tinyauth_user;
+        proxy_set_header Remote-User     $tinyauth_user;
+
+        # ------------------------------------------------------------------
+        # Anti-spoofing gateway token (recommended)
+        # Must match the container env GATEWAY_TOKEN of tinyauth-mgmt.
+        # Other containers on the same docker network could otherwise reach
+        # tinyauth-mgmt:8080 directly and forge the identity header.
+        # ------------------------------------------------------------------
+        proxy_set_header X-Admin-Gateway "change-me-to-a-long-random-string";
+
+        # forward the renewed session cookie from the auth subrequest
+        auth_request_set $auth_cookie $upstream_http_set_cookie;
+        add_header Set-Cookie $auth_cookie always;
+
+        # tinyauth-mgmt listens on 8080 INSIDE the container; no host port is published
+        proxy_pass http://tinyauth-mgmt:8080;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /auth {
+        internal;
+        proxy_pass http://tinyauth:3002/api/auth/nginx;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Original-URL $scheme://$host:$server_port$request_uri;
+        proxy_set_header X-Original-Method $request_method;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

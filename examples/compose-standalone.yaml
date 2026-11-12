@@ -1,0 +1,52 @@
+version: "3.8"
+
+# ============================================================================
+# Mode B — standalone tinyauth-mgmt stack (does not touch your tinyauth stack)
+#
+# The existing tinyauth data volume and your proxy network are referenced by
+# NAME. Two ways to set them:
+#
+#   1) put them in a `.env` file next to this compose file (read automatically):
+#        TINYAUTH_DATA_VOLUME=tinyauth_tinyauth-data
+#        PROXY_NETWORK=proxy
+#   2) or edit the `name:` fields below directly.
+#
+# Find the real names (run on your docker host):
+#   docker volume ls --format '{{.Name}}' | grep tinyauth
+#   docker inspect tinyauth -f '{{range .NetworkSettings.Networks}}{{.Name}}{{end}}'
+#
+# external: true → this stack can never create or delete those volumes/networks
+# (a typo fails loudly instead of silently creating an empty volume).
+# ============================================================================
+
+services:
+  tinyauth-mgmt:
+    # until the image is published, build it locally and use your local tag:
+    #   docker build -t tinyauth-mgmt:v0.1 .
+    image: ghcr.io/xylz0928/tinyauth-mgmt:latest
+    container_name: tinyauth-mgmt
+    restart: unless-stopped
+    environment:
+      # ★ REQUIRED: your tinyauth admin username(s), comma separated (fail-closed)
+      - ADMIN_USERS=admin
+      # ★ RECOMMENDED: long random string, also injected by your reverse proxy
+      - GATEWAY_TOKEN=change-me-to-a-long-random-string
+      # - TZ=Asia/Shanghai
+      # - PORTAINER_URL=http://portainer:9000
+      # - PORTAINER_TOKEN=your-portainer-api-key
+    volumes:
+      - tinyauth-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - proxy
+    # NO ports on purpose: the console is reachable only via your reverse proxy.
+
+volumes:
+  tinyauth-data:
+    name: ${TINYAUTH_DATA_VOLUME:-tinyauth_tinyauth-data}
+    external: true
+
+networks:
+  proxy:
+    name: ${PROXY_NETWORK:-proxy}
+    external: true

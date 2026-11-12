@@ -1,0 +1,65 @@
+version: "3.8"
+
+# ============================================================================
+# Mode A — run tinyauth and tinyauth-mgmt in ONE compose file (recommended)
+#
+# If you already run tinyauth: only the `tinyauth-mgmt` service block below is
+# new — keep your existing services / volumes / networks declarations untouched.
+# Because both services live in the same compose project, they share the data
+# volume automatically (same key → same prefixed volume), for ANY project name.
+#
+# If you are starting from scratch: this file shows the full picture, based on
+# the official tinyauth example.
+# ============================================================================
+
+services:
+  tinyauth:
+    image: ghcr.io/tinyauthapp/tinyauth:v5.2.0
+    container_name: tinyauth
+    restart: unless-stopped
+    environment:
+      - TINYAUTH_SERVER_PORT=3002
+      - TINYAUTH_AUTH_SECURECOOKIE=true              # required when served over HTTPS
+      - TINYAUTH_DATABASE_PATH=/data/tinyauth.db
+      - TINYAUTH_CONFIGFILE=/data/tinyauth-config.yaml
+      - TINYAUTH_ANALYTICS_ENABLED=true
+      # - TINYAUTH_APPURL=https://tinyauth.example.com
+      # - DOMAIN=.example.com
+    volumes:
+      - tinyauth-data:/data
+    networks:
+      - webs
+
+  tinyauth-mgmt:
+    # until the image is published, build it locally and use your local tag:
+    #   docker build -t tinyauth-mgmt:v0.1 .
+    image: ghcr.io/xylz0928/tinyauth-mgmt:latest
+    container_name: tinyauth-mgmt
+    restart: unless-stopped
+    environment:
+      # ★ REQUIRED: your tinyauth admin username(s), comma separated.
+      #   Fail-closed: if unset, NOBODY gets admin routes.
+      - ADMIN_USERS=admin
+      # ★ RECOMMENDED: long random string, also injected by your reverse proxy
+      #   (see docs/security-model.md) — blocks header spoofing from other
+      #   containers on the same docker network.
+      - GATEWAY_TOKEN=change-me-to-a-long-random-string
+      # - TZ=Asia/Shanghai
+      # OPTIONAL — enable the "compose image vs running image" check via the
+      # Portainer API (only if you manage stacks with Portainer):
+      # - PORTAINER_URL=http://portainer:9000
+      # - PORTAINER_TOKEN=your-portainer-api-key
+    volumes:
+      - tinyauth-data:/data                        # same key as tinyauth → same volume
+      - /var/run/docker.sock:/var/run/docker.sock   # restart / inspect (see security-model.md)
+    networks:
+      - webs
+    # NO ports on purpose: the console is reachable only via your reverse proxy.
+
+volumes:
+  tinyauth-data:                # ← keep the key you already use for tinyauth
+
+networks:
+  webs:
+    external:
+      name: webs                # ← keep whatever network your proxy already uses
