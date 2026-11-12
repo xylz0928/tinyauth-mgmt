@@ -1,0 +1,170 @@
+/* ==========================================================================
+   tinyauth-mgmt — design tokens
+   Distilled from luci-theme-liquid (author's theme).
+   Single accent palette (blue) only — no data-accent multi-palette support.
+   Light / dark via <html data-darkmode="true|false">; flat background only.
+   ========================================================================== */
+
+:root {
+	color-scheme: light;
+
+	/* -- LuCI compatible palette (light) -- */
+	--background-color-high: #f4f6fa;
+	--background-color-medium: #e9edf4;
+	--background-color-low: #dfe5ef;
+
+	--text-color-highest: #10151d;
+	--text-color-high: #1d2633;
+	--text-color-medium: #4c5868;
+	--text-color-low: #8a95a6;
+
+	--border-color-high: rgba(23, 34, 52, 0.20);
+	--border-color-medium: rgba(23, 34, 52, 0.13);
+	--border-color-low: rgba(23, 34, 52, 0.07);
+
+	--primary-color-high: #2f7fe0;
+	--primary-color-medium: #1f6fc8;
+	--primary-color-low: #0f56a8;
+	--on-primary-color: #ffffff;
+
+	--error-color-high-rgb: 224, 58, 58;
+	--error-color-high: rgb(var(--error-color-high-rgb));
+	--error-color-medium: #d23c3c;
+	--error-color-low: #b52a2a;
+	--on-error-color: #ffffff;
+
+	--success-color-high-rgb: 16, 166, 96;
+	--success-color-high: rgb(var(--success-color-high-rgb));
+	--success-color-medium: #0d9a58;
+	--success-color-low: #0a8048;
+	--on-success-color: #ffffff;
+
+	--warn-color-high: #e0a013;
+	--warn-color-medium: #d99414;
+	--warn-color-low: #c98716;
+	--on-warn-color: #3a2c00;
+
+	--disabled-opacity: .65;
+
+	--table-stripe: #f4f6f9;
+
+	/* flat background — no gradient wallpaper (design decision) */
+	--body-bg: #f4f6fa;
+
+	/* typography */
+	--font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+	             "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas,
+	             "Liberation Mono", monospace;
+
+	/* -- liquid glass (light) -- */
+	--glass-blur: 26px;
+	--glass-sat: 1.6;
+	--glass-radius: 18px;
+	--glass-radius-lg: 24px;
+	--glass-bg: rgba(255, 255, 255, 0.42);
+	--glass-bg-strong: rgba(255, 255, 255, 0.66);
+	--glass-bg-hover: rgba(47, 127, 224, 0.12);
+	--glass-border: rgba(255, 255, 255, 0.80);
+	--glass-inset: rgba(255, 255, 255, 0.95);
+	--glass-shadow: 0 22px 54px rgba(31, 45, 70, 0.16), 0 2px 8px rgba(31, 45, 70, 0.06);
+	--glass-shadow-soft: 0 8px 24px rgba(31, 45, 70, 0.10);
+	--field-bg: rgba(255, 255, 255, 0.56);
+
+	--accent-grad: linear-gradient(135deg, #5aa8f7 0%, #2f7fe0 48%, #1a63c4 100%);
+	--accent-glow: rgba(47, 127, 224, 0.38);
+	--danger-grad: linear-gradient(135deg, #f06767, #e03a3a);
+	--danger-glow: rgba(224, 58, 58, 0.35);
+	--warn-grad: linear-gradient(135deg, #f59e0b, #ea580c);
+	--ok-grad: linear-gradient(135deg, #10a660, #0d9a58);
+
+	/* -- pushbot cards & fields -- */
+	--card-bg: #ffffff;
+	--card-border: rgba(148, 163, 184, 0.22);
+	--card-shadow:
+		0 10px 28px rgba(15, 23, 42, 0.14),
+		0 -3px 8px rgba(15, 23, 42, 0.05),
+		3px 0 8px rgba(15, 23, 42, 0.05),
+		-3px 0 8px rgba(15, 23, 42, 0.05);
+	--field-card-bg: #f8fafc;
+	--field-card-border: rgba(148, 163, 184, 0.30);
+	--field-label-color: #475569;
+	--chip-bg: rgba(148, 163, 184, 0.08);
+	--tag-bg: rgba(59, 130, 246, 0.12);
+	--tag-border: rgba(59, 130, 246, 0.25);
+}
+
+:root[data-darkmode="true"] {
+	color-scheme: dark;
+
+	--background-color-high: #10151d;
+	--background-color-medium: #161d29;
+	--background-color-low: #1b2330;
+
+	--text-color-highest: #eef2f8;
+	--text-color-high: #dbe3ee;
+	--text-color-medium: #9aa7ba;
+	--text-color-low: #6c7a8f;
+
+	--border-color-high: rgba(255, 255, 255, 0.16);
+	--border-color-medium: rgba(255, 255, 255, 0.11);
+	--border-color-low: rgba(255, 255, 255, 0.07);
+
+	--primary-color-high: #7cbcff;
+	--primary-color-medium: #5da3f0;
+	--primary-color-low: #2f74cc;
+	--on-primary-color: #0b1220;
+
+	--error-color-high-rgb: 226, 98, 98;
+	--error-color-high: rgb(var(--error-color-high-rgb));
+	--error-color-medium: #cf5f5f;
+	--error-color-low: #b34a4a;
+	--on-error-color: #0b1220;
+
+	--success-color-high-rgb: 46, 185, 118;
+	--success-color-high: rgb(var(--success-color-high-rgb));
+	--success-color-medium: #38a86f;
+	--success-color-low: #2f8f5d;
+	--on-success-color: #0b1220;
+
+	--warn-color-high: #d9a33a;
+	--warn-color-medium: #c99430;
+	--warn-color-low: #b8842a;
+	--on-warn-color: #221a05;
+
+	--disabled-opacity: .45;
+
+	--table-stripe: #1b2330;
+
+	--body-bg: #0a0f18;
+
+	--glass-bg: rgba(24, 32, 48, 0.40);
+	--glass-bg-strong: rgba(22, 29, 44, 0.74);
+	--glass-bg-hover: rgba(42, 54, 78, 0.55);
+	--glass-border: rgba(255, 255, 255, 0.16);
+	--glass-inset: rgba(255, 255, 255, 0.10);
+	--glass-shadow: 0 26px 64px rgba(0, 0, 0, 0.60), 0 2px 10px rgba(0, 0, 0, 0.32);
+	--glass-shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.50);
+	--field-bg: rgba(255, 255, 255, 0.07);
+
+	--accent-grad: linear-gradient(135deg, #7cbcff 0%, #5da3f0 48%, #2f74cc 100%);
+	--accent-glow: rgba(93, 163, 240, 0.40);
+	--danger-grad: linear-gradient(135deg, #f06767, #b34a4a);
+	--danger-glow: rgba(226, 98, 98, 0.35);
+	--warn-grad: linear-gradient(135deg, #d9a33a, #b8842a);
+	--ok-grad: linear-gradient(135deg, #38a86f, #2f8f5d);
+
+	--card-bg: rgba(22, 29, 44, 0.74);
+	--card-border: rgba(255, 255, 255, 0.10);
+	--card-shadow:
+		0 10px 28px rgba(0, 0, 0, 0.45),
+		0 -3px 8px rgba(0, 0, 0, 0.25),
+		3px 0 8px rgba(0, 0, 0, 0.25),
+		-3px 0 8px rgba(0, 0, 0, 0.25);
+	--field-card-bg: rgba(255, 255, 255, 0.05);
+	--field-card-border: rgba(148, 163, 184, 0.22);
+	--field-label-color: #9aa7ba;
+	--chip-bg: rgba(148, 163, 184, 0.12);
+	--tag-bg: rgba(96, 165, 250, 0.16);
+	--tag-border: rgba(96, 165, 250, 0.30);
+}

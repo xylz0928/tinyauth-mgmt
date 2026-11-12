@@ -14,8 +14,10 @@ or remembering CLI incantations. `tinyauth-mgmt` turns that into a browser UI:
   (forward-auth), so the console knows exactly who you are
 
 > 🚧 **Status: under construction.**
-> Compose examples, reverse-proxy templates, the security model and the deployment
-> guide are final. Backend & frontend code are being built next.
+> ✅ Compose examples, reverse-proxy templates, security model, deployment guide, design system
+> ✅ Backend core: identity chain, roles (`ADMIN_USERS`), read-only APIs — users / sessions / image
+> ✅ Frontend shell: theme (auto/light/dark), role-based navigation, users/sessions/stack views
+> 🚧 Next: mutation APIs (password, TOTP, session kick, restart) + self-service UI → image publish
 
 ## Permission model
 

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en" data-darkmode="false" data-mode="auto">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="robots" content="noindex, nofollow">
+	<title>tinyauth-mgmt</title>
+	<script src="js/mode.js"></script>
+	<link rel="stylesheet" href="css/tokens.css">
+	<link rel="stylesheet" href="css/app.css">
+	<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f7fe0'/%3E%3Cpath d='M9 17l4 4 10-10' stroke='white' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+</head>
+<body>
+	<header class="app-header">
+		<div class="app-header-inner">
+			<div class="brand">
+				<span class="brand-mark"></span>
+				<span>tinyauth-mgmt</span>
+				<span class="brand-sub">console</span>
+			</div>
+			<div class="header-spacer"></div>
+			<span class="identity" id="identity" hidden>
+				<span class="who" id="identity-user">…</span>
+				<span class="role-badge" id="identity-role">…</span>
+			</span>
+			<button class="icon-btn" id="theme-toggle" type="button" title="Theme">Auto</button>
+		</div>
+	</header>
+
+	<nav class="app-nav" id="nav" hidden></nav>
+
+	<main class="app-main" id="view">
+		<div class="card"><div class="empty"><span class="spinner"></span> loading…</div></div>
+	</main>
+
+	<div class="toast-layer" id="toast-layer"></div>
+
+	<script src="js/app.js"></script>
+</body>
+</html>
