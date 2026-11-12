@@ -118,6 +118,7 @@
 
 		var bodyEl = box.querySelector(".modal-body");
 		var actionsEl = box.querySelector(".modal-actions");
+		bodyEl.innerHTML = opts.body || "";
 		var handler = opts.onAction || function () { return Promise.resolve(true); };
 		var closed = false;
 
@@ -141,8 +142,10 @@
 				el.addEventListener("click", async function () {
 					el.disabled = true;
 					try {
-						var keepOpen = await handler(b.id, api);
-						if (!keepOpen) close();
+						// handlers follow "return true = done, close the modal"
+						var done = await handler(b.id, api);
+						if (done) close();
+						else el.disabled = false;   // validation failed: let them retry
 					} catch (e) {
 						toast(e.message || "failed", "error");
 						el.disabled = false;
@@ -709,6 +712,15 @@
 	function boot() {
 		var btn = $("theme-toggle");
 		btn.addEventListener("click", function () { window.__tmTheme.cycle(); });
+
+		// version badge (ungated endpoint, shows even before identity resolves)
+		fetch("/api/health").then(function (r) { return r.json(); }).then(function (h) {
+			if (h && h.version) {
+				var v = $("brand-version");
+				v.textContent = h.version;
+				v.hidden = false;
+			}
+		}).catch(function () { /* version is cosmetic */ });
 
 		api("/api/me").then(function (m) {
 			me = m;

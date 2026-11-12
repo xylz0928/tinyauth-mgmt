@@ -74,6 +74,19 @@ a:hover { text-decoration: underline; }
 	text-transform: uppercase;
 }
 
+.brand-version {
+	font-family: var(--font-mono);
+	font-size: 10px;
+	font-weight: 700;
+	padding: 1px 7px;
+	border-radius: 999px;
+	background: var(--chip-bg);
+	border: 1px solid var(--border-color-low);
+	color: var(--text-color-low);
+	letter-spacing: .03em;
+	white-space: nowrap;
+}
+
 .header-spacer { flex: 1; }
 
 /* identity chip */

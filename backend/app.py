@@ -55,6 +55,8 @@ DOCKER_BACKEND = os.environ.get("DOCKER_BACKEND", "auto").lower()
 TINYAUTH_HEALTH_URL = os.environ.get("TINYAUTH_HEALTH_URL", "http://tinyauth:3002/api/healthz")
 # cookie mode: where to validate session cookies (see _verify_session_with_tinyauth)
 TINYAUTH_AUTH_URL = os.environ.get("TINYAUTH_AUTH_URL", "http://tinyauth:3002/api/auth/nginx")
+# baked into the image at build time (--build-arg APP_VERSION=vX.Y)
+APP_VERSION = os.environ.get("APP_VERSION", "")
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 # works in both layouts: flat container (/app/frontend) and repo (../frontend)
@@ -485,7 +487,7 @@ def require_admin():
 # --------------------------------------------------------------------------
 @app.get("/api/health")
 def health():
-    return jsonify(status="ok")
+    return jsonify(status="ok", version=APP_VERSION)
 
 
 @app.get("/")
@@ -504,7 +506,7 @@ def me():
     except OSError:
         pass  # degrade gracefully: account view shows "enable TOTP"
     return jsonify(username=g.user, role=g.role, has_totp=has_totp,
-                   admin_configured=bool(ADMIN_USERS))
+                   admin_configured=bool(ADMIN_USERS), version=APP_VERSION)
 
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")

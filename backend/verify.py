@@ -167,6 +167,7 @@ def start_server(port, admin_users, extra_env=None):
         "GATEWAY_TOKEN": "s3cret",
         "LOG_LEVEL": "WARNING",
         "TINYAUTH_AUTH_URL": f"http://127.0.0.1:{MOCK_PORT}/api/auth/nginx",
+        "APP_VERSION": "0.0-test",
     })
     if extra_env:
         env.update(extra_env)
@@ -195,7 +196,8 @@ def main():
 
         # --- health & static ---
         st, b = req(PORT1, "/api/health")
-        t("health open (no auth)", st == 200 and b.get("status") == "ok", f"{st} {b}")
+        t("health open (no auth)", st == 200 and b.get("status") == "ok"
+          and b.get("version") == "0.0-test", f"{st} {b}")
         st, b = req(PORT1, "/")
         t("index html served", st == 200 and "tinyauth-mgmt" in b if isinstance(b, str) else False)
         st, b = req(PORT1, "/css/tokens.css")
