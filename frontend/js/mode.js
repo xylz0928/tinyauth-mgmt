@@ -9,22 +9,28 @@
 	var mq = window.matchMedia("(prefers-color-scheme: dark)");
 
 	var ICONS = {
-		auto:
-			'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" ' +
-			'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-			'aria-hidden="true"><circle cx="12" cy="12" r="9"/>' +
-			'<path d="M123a99 0 0 0 10 18 9 9 0 0 0 0-18z" fill="currentColor" stroke="none"/></svg>',
-		light:
-			'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" ' +
-			'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-			'aria-hidden="true"><circle cx="12" cy="12" r="4"/>' +
-			'<path d="M122v2M1220v2M4.934.93l1.41 1.41M17.66 5.66l1.41-1.41' +
-			'M2112h2M312h2M4.9319.07l1.41-1.41M17.6618.34l1.411.41"/></svg>',
-		dark:
-			'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" ' +
-			'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-			'aria-hidden="true"><path d="M2112.79A9.979.97 0011.213.21 1010 012112.79z"/></svg>'
-	};
+	/* NOTE: SVG path numbers MUST be space-separated — "M12 2v2" cannot be
+	   written "M122v2" (it parses as x=122, off-canvas). All three icons were
+	   broken exactly that way. */
+	auto:
+		'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" ' +
+		'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" ' +
+		'stroke-linejoin="round" aria-hidden="true">' +
+		'<circle cx="12" cy="12" r="9"/>' +
+		'<path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>',
+	light:
+		'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" ' +
+		'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" ' +
+		'stroke-linejoin="round" aria-hidden="true">' +
+		'<circle cx="12" cy="12" r="4"/>' +
+		'<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 5.66l1.41-1.41 ' +
+		'M21 12h2M3 12h2M4.93 19.07l1.41-1.41M17.66 18.34l1.41 1.41"/></svg>',
+	dark:
+		'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" ' +
+		'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" ' +
+		'stroke-linejoin="round" aria-hidden="true">' +
+		'<path d="M21 12.79A9.97 9.97 0 0 1 11.21 3.21 10 10 0 0 0 21 12.79z"/></svg>'
+};
 
 	function current() {
 		var m = localStorage.getItem(KEY);
