@@ -12,7 +12,7 @@ COPY backend/app.py ./app.py
 COPY frontend/ ./frontend/
 
 ENV TINYAUTH_DATA_DIR=/data \
-    PORT=8080
-EXPOSE 8080
+    PORT=80
+EXPOSE 80
 
-CMD ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:8080", "--access-logfile", "-", "app:app"]
+CMD ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:80", "--access-logfile", "-", "app:app"]

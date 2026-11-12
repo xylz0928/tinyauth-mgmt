@@ -51,6 +51,15 @@
 				if (!r.ok) {
 					var err = new Error(body.error || ("HTTP " + r.status));
 					err.status = r.status;
+					if (r.status === 401 && body.login_url) {
+						// session gone: tinyauth hands us the login URL — send the
+						// user back to the console root instead of a raw JSON API
+						var target = body.login_url.replace(
+							/redirect_uri=[^&]*/,
+							"redirect_uri=" + encodeURIComponent(window.location.origin + "/"));
+						window.location.href = target;
+						return new Promise(function () {});  // navigation takes over
+					}
 					throw err;
 				}
 				return body;

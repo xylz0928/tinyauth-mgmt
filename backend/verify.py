@@ -11,21 +11,26 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import shutil
 import sqlite3
 import struct
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BACKEND = os.path.join(REPO, "backend")
 BASE = "/tmp/tm-verify"
 GW = {"X-Admin-Gateway": "s3cret"}
 PORT1, PORT2 = "18099", "18100"
-PORT_MUT, PORT_CFG = "18101", "18102"
+PORT_MUT, PORT_CFG, PORT_CK = "18101", "18102", "18103"
+MOCK_PORT = "18098"
+MOCK_LOGIN = "http://tinyauth.test/login"
 
 failures = []
 
@@ -44,6 +49,13 @@ def req(port, path, headers=None, method="GET", data=None, origin=None):
     hdrs = dict(headers or {})
     if origin:
         hdrs["Origin"] = origin
+    # gateway-mode instances validate identity via the session cookie (the mock
+    # auth echoes tm_user=<name> as Remote-User), so synthesize that cookie from
+    # the identity header the test intended — unless the test already sends one.
+    if "X-Admin-Gateway" in hdrs and "Cookie" not in hdrs:
+        intended = hdrs.get("Remote-User") or hdrs.get("X-Tinyauth-User") or ""
+        if re.fullmatch(r"\w+", intended):
+            hdrs["Cookie"] = "tm_user=" + intended
     if data is not None:
         body = json.dumps(data).encode()
         hdrs["Content-Type"] = "application/json"
@@ -72,6 +84,30 @@ def wait_health(port, tries=40):
             return True
         time.sleep(0.25)
     return False
+
+
+class MockAuth(BaseHTTPRequestHandler):
+    """Stand-in for tinyauth's /api/auth/nginx.
+    Cookie tm_user=<name> ->200 + Remote-User header; otherwise401 + login URL."""
+    def do_GET(self):
+        m = re.search(r"tm_user=(\w+)", self.headers.get("Cookie", ""))
+        if m:
+            self.send_response(200)
+            self.send_header("Remote-User", m.group(1))
+            self.end_headers()
+        else:
+            self.send_response(401)
+            self.send_header("X-Tinyauth-Location", MOCK_LOGIN)
+            self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+def start_mock_auth():
+    httpd = HTTPServer(("127.0.0.1", int(MOCK_PORT)), MockAuth)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd
 
 
 def write_fixtures():
@@ -130,6 +166,7 @@ def start_server(port, admin_users, extra_env=None):
         "ADMIN_USERS": admin_users,
         "GATEWAY_TOKEN": "s3cret",
         "LOG_LEVEL": "WARNING",
+        "TINYAUTH_AUTH_URL": f"http://127.0.0.1:{MOCK_PORT}/api/auth/nginx",
     })
     if extra_env:
         env.update(extra_env)
@@ -146,10 +183,12 @@ def start_server(port, admin_users, extra_env=None):
 
 def main():
     write_fixtures()
+    mock = start_mock_auth()
     s1 = start_server(PORT1, "admin")
     s2 = None
     s_mut = None
     s_cfg = None
+    s_ck = None
     try:
         id_admin = {"Remote-User": "admin", **GW}
         id_other = {"X-Tinyauth-User": "other", **GW}
@@ -165,6 +204,10 @@ def main():
         # --- identity chain ---
         st, b = req(PORT1, "/api/me", GW)
         t("gateway ok but no identity -> 401", st == 401, f"{st} {b}")
+        st, b = req(PORT1, "/api/me", {**GW, "Cookie": "tm_user=admin"})
+        t("mode C: gateway ok + empty identity header -> cookie fallback -> admin",
+          st == 200 and b.get("role") == "admin" and b.get("username") == "admin",
+          f"{st} {b}")
         st, b = req(PORT1, "/api/me", {"Remote-User": "admin"})          # no gateway
         t("missing gateway token -> 403", st == 403, f"{st} {b}")
         st, b = req(PORT1, "/api/me", {"Remote-User": "admin", "X-Admin-Gateway": "wrong"})
@@ -409,6 +452,22 @@ def main():
         t("image on misconfigured portainer -> 400",
           st == 400 and "PORTAINER_URL" in str(b), f"{st} {b}")
 
+        # --- cookie mode (GATEWAY_TOKEN unset): identity headers never trusted ---
+        s_ck = start_server(PORT_CK, "admin", {"GATEWAY_TOKEN": ""})
+        st, b = req(PORT_CK, "/api/me", {"Cookie": "tm_user=admin"})
+        t("cookie mode: valid session -> admin",
+          st == 200 and b.get("role") == "admin" and b.get("username") == "admin",
+          f"{st} {b}")
+        st, b = req(PORT_CK, "/api/me", {})
+        t("cookie mode: no cookie -> 401 with login_url",
+          st == 401 and b.get("login_url") == MOCK_LOGIN, f"{st} {b}")
+        st, b = req(PORT_CK, "/api/me", {"Remote-User": "admin"})
+        t("cookie mode: forged identity header ignored (anti-spoof)",
+          st == 401, f"{st} {b}")
+        st, b = req(PORT_CK, "/api/admin/users", {"Cookie": "tm_user=other"})
+        t("cookie mode: non-admin session -> admin api 403",
+          st == 403, f"{st} {b}")
+
         # --- fail-closed: ADMIN_USERS unset ---
         s2 = start_server(PORT2, "")
         st, b = req(PORT2, "/api/me", {"Remote-User": "admin", **GW})
@@ -417,9 +476,10 @@ def main():
         st, b = req(PORT2, "/api/admin/users", {"Remote-User": "admin", **GW})
         t("no ADMIN_USERS configured -> admin api 403", st == 403, f"{st} {b}")
     finally:
-        for proc in (s1, s_mut, s_cfg, s2):
+        for proc in (s1, s_mut, s_cfg, s_ck, s2):
             if proc:
                 proc.terminate()
+        mock.shutdown()
         time.sleep(0.3)
 
     print()

@@ -60,7 +60,7 @@
 | Variable | Where | Required | Meaning |
 |---|---|---|---|
 | `ADMIN_USERS` | container env | **yes** (for admin features) | tinyauth username(s) with full power, comma separated. **Fail-closed: unset = nobody is admin.** |
-| `GATEWAY_TOKEN` | container env | strongly recommended | shared secret injected by the reverse proxy; requests without it get 403 (anti-spoofing) |
+| `GATEWAY_TOKEN` | container env | optional (recommended) | shared secret the reverse proxy must inject as `X-Admin-Gateway`. **Double-factor**: even with the token, identity still comes only from a session cookie validated directly with tinyauth — a leaked token alone can never impersonate anyone. Unset = cookie-only mode. |
 | `DOCKER_BACKEND` | container env | no (`auto`) | which transport drives restart/inspect: `auto` (default: Portainer API when configured, else docker socket), `socket`, `portainer` |
 | `PORTAINER_URL` + `PORTAINER_TOKEN` | container env | for Portainer mode | Portainer base URL + API key (also enables the compose-image cross-check) |
 | `PORTAINER_ENDPOINT` | container env | only with several docker endpoints | endpoint name or id to target |

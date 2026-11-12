@@ -53,6 +53,8 @@ PORTAINER_TOKEN = os.environ.get("PORTAINER_TOKEN", "")
 #   portainer           -> Portainer API (requires PORTAINER_URL + PORTAINER_TOKEN)
 DOCKER_BACKEND = os.environ.get("DOCKER_BACKEND", "auto").lower()
 TINYAUTH_HEALTH_URL = os.environ.get("TINYAUTH_HEALTH_URL", "http://tinyauth:3002/api/healthz")
+# cookie mode: where to validate session cookies (see _verify_session_with_tinyauth)
+TINYAUTH_AUTH_URL = os.environ.get("TINYAUTH_AUTH_URL", "http://tinyauth:3002/api/auth/nginx")
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 # works in both layouts: flat container (/app/frontend) and repo (../frontend)
@@ -385,6 +387,51 @@ def sanitize_identity(value):
     return value
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow redirects — a login redirect must surface as its status."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_AUTH_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def _verify_session_with_tinyauth():
+    """Validate THIS request's session cookie against tinyauth itself.
+
+    Identity always comes from tinyauth's own answer (Remote-User), so forged
+    identity headers are worthless. Returns (username, login_url, error).
+    """
+    proto = request.headers.get("X-Forwarded-Proto") or (
+        "https" if request.is_secure else "http")
+    host = request.headers.get("X-Forwarded-Host") or request.host
+    original = f"{proto}://{host}{request.path}"
+    if request.query_string:
+        original += "?" + request.query_string.decode(errors="replace")
+    req = urllib.request.Request(
+        TINYAUTH_AUTH_URL,
+        headers={
+            "Cookie": request.headers.get("Cookie", ""),
+            "X-Original-URL": original,
+            "X-Original-Method": request.method,
+            "X-Forwarded-Proto": proto,
+        })
+    try:
+        with _AUTH_OPENER.open(req, timeout=5) as resp:
+            status, hdrs = resp.status, resp.headers
+    except urllib.error.HTTPError as exc:
+        status, hdrs = exc.code, exc.headers
+    except Exception as exc:  # noqa: BLE001
+        return None, None, f"tinyauth auth endpoint unreachable: {exc}"
+    if status == 200:
+        user = sanitize_identity(hdrs.get("Remote-User"))
+        if user:
+            return user, None, None
+        return None, None, "tinyauth accepted the session but sent no Remote-User"
+    login = hdrs.get("X-Tinyauth-Location") or hdrs.get("Location")
+    return None, login, None
+
+
 @app.before_request
 def _identity_chain():
     # only the API surface is gated; static shell assets (/, /css, /js) carry
@@ -392,22 +439,35 @@ def _identity_chain():
     if request.path == "/api/health" or not request.path.startswith("/api/"):
         return None
 
-    # 1) gateway token: only requests coming through the reverse proxy
-    if GATEWAY_TOKEN and request.headers.get("X-Admin-Gateway", "") != GATEWAY_TOKEN:
-        return jsonify(error="missing or invalid gateway token"), 403
-
-    # 2) same-origin enforcement for state-changing requests
+    # 1) same-origin enforcement for state-changing requests
     if request.method in MUTATING:
         origin = request.headers.get("Origin")
         if origin:
             if urllib.parse.urlparse(origin).netloc != request.host:
-                return jsonify(error="origin mismatch"), 403
+                return jsonify(error="origin mismatch"),403
 
-    # 3) identity comes only from the forward-auth header chain
-    ident = sanitize_identity(
-        request.headers.get("X-Tinyauth-User") or request.headers.get("Remote-User"))
+    # 2) identity — two modes (see docs/security-model.md):
+    #    GATEWAY_TOKEN set   -> gateway mode: the request MUST carry the shared
+    #        secret (proves it came through our reverse proxy). Identity comes
+    #        from the forwarded header when present; when the proxy does not
+    #        forward it (e.g. it reads the wrong upstream header and the value
+    #        arrives empty), fall back to validating the session cookie with
+    #        tinyauth — a leaked token alone is then never enough to impersonate.
+    #    GATEWAY_TOKEN unset -> cookie mode: identity headers are NEVER trusted;
+    #        the session cookie is validated with tinyauth directly.
+    if GATEWAY_TOKEN:
+        if request.headers.get("X-Admin-Gateway", "") != GATEWAY_TOKEN:
+            return jsonify(error="missing or invalid gateway token"),403
+
+    # identity ALWAYS comes from a cookie validated with tinyauth — identity
+    # headers are never trusted, so BOTH factors are required: a leaked
+    # gateway token alone can not impersonate anyone, and a stolen identity
+    # header without a real session is worthless.
+    ident, login_url, err = _verify_session_with_tinyauth()
+    if err:
+        return jsonify(error=err),502
     if not ident:
-        return jsonify(error="no identity: proxy did not forward Remote-User"), 401
+        return jsonify(error="not authenticated", login_url=login_url),401
 
     g.user = ident
     g.role = "admin" if ident in ADMIN_USERS else "self"
