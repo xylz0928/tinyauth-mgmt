@@ -44,11 +44,16 @@ services:
       #   (see docs/security-model.md) — blocks header spoofing from other
       #   containers on the same docker network.
       - GATEWAY_TOKEN=change-me-to-a-long-random-string
-      # - TZ=Asia/Shanghai
-      # OPTIONAL — enable the "compose image vs running image" check via the
-      # Portainer API (only if you manage stacks with Portainer):
+      # docker transport for restart/inspect (auto | socket | portainer):
+      #   auto     = Portainer API when PORTAINER_* is set, else docker socket
+      #   portainer= Portainer API only → then you may REMOVE the docker.sock
+      #              mount below; also enables the compose-image cross-check
+      # - DOCKER_BACKEND=portainer
       # - PORTAINER_URL=http://portainer:9000
       # - PORTAINER_TOKEN=your-portainer-api-key
+      # - PORTAINER_ENDPOINT=local
+      # - TINYAUTH_HEALTH_URL=http://tinyauth:3002/api/healthz
+      # - TZ=Asia/Shanghai
     volumes:
       - tinyauth-data:/data                        # same key as tinyauth → same volume
       - /var/run/docker.sock:/var/run/docker.sock   # restart / inspect (see security-model.md)

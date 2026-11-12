@@ -10,19 +10,27 @@ Roles:
     admin  -> full API access, membership comes from env ADMIN_USERS (fail-closed)
     self   -> identity-only routes (self-service mutations arrive next milestone)
 """
+import base64
+import hashlib
+import hmac
 import http.client
 import json
 import logging
 import os
 import re
+import secrets
+import shutil
 import socket
 import sqlite3
+import stat
+import struct
 import time
 import urllib.parse
 import urllib.request
 from collections import defaultdict
 from datetime import datetime
 
+import bcrypt
 import yaml
 from flask import Blueprint, Flask, g, jsonify, request, send_from_directory
 
@@ -39,6 +47,12 @@ DOCKER_SOCK = os.environ.get("DOCKER_SOCK", "/var/run/docker.sock")
 TINYAUTH_CONTAINER = os.environ.get("TINYAUTH_CONTAINER", "tinyauth")
 PORTAINER_URL = os.environ.get("PORTAINER_URL", "").rstrip("/")
 PORTAINER_TOKEN = os.environ.get("PORTAINER_TOKEN", "")
+# docker backend choice — the user decides:
+#   auto     (default) -> Portainer API when PORTAINER_URL+TOKEN are set, else socket
+#   socket              -> /var/run/docker.sock directly
+#   portainer           -> Portainer API (requires PORTAINER_URL + PORTAINER_TOKEN)
+DOCKER_BACKEND = os.environ.get("DOCKER_BACKEND", "auto").lower()
+TINYAUTH_HEALTH_URL = os.environ.get("TINYAUTH_HEALTH_URL", "http://tinyauth:3002/api/healthz")
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 # works in both layouts: flat container (/app/frontend) and repo (../frontend)
@@ -191,16 +205,21 @@ class _UnixHTTPConnection(http.client.HTTPConnection):
         self.sock.connect(self._sock_path)
 
 
-def docker_get(path):
+def docker_request(method, path):
     conn = _UnixHTTPConnection(DOCKER_SOCK)
     try:
-        conn.request("GET", path, headers={"Host": "localhost"})
+        conn.request(method, path, headers={"Host": "localhost"})
         resp = conn.getresponse()
         body = resp.read()
     finally:
         conn.close()
-    if resp.status != 200:
-        raise RuntimeError(f"docker api {path} -> {resp.status}: {body[:200]!r}")
+    return resp.status, body
+
+
+def docker_get(path):
+    status, body = docker_request("GET", path)
+    if status != 200:
+        raise RuntimeError(f"docker api {path} -> {status}: {body[:200]!r}")
     return json.loads(body)
 
 
@@ -222,22 +241,14 @@ def parse_service_image(compose_text, service):
     return None
 
 
-def portainer_compose_image(project, service):
-    """Optional cross-check via the Portainer API (PORTAINER_URL/TOKEN)."""
-    if not (PORTAINER_URL and PORTAINER_TOKEN):
-        return None, "portainer api not configured (set PORTAINER_URL + PORTAINER_TOKEN)"
-    def _api(path):
-        req = urllib.request.Request(
-            PORTAINER_URL + path,
-            headers={"X-API-Key": PORTAINER_TOKEN, "Accept": "application/vnd.github+json"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return json.loads(r.read() or b"{}")
+def portainer_compose_image(api, project, service):
+    """Cross-check the compose-declared image through the Portainer API."""
     try:
-        stacks = _api("/api/stacks")
+        stacks = api("/api/stacks")
         stack = next((s for s in stacks if s.get("Name") == project), None)
         if not stack:
             return None, f"no portainer stack named {project!r}"
-        detail = _api(f"/api/stacks/{stack['Id']}")
+        detail = api(f"/api/stacks/{stack['Id']}")
         text = detail.get("composeFile") or ""
         img = parse_service_image(text, service or "")
         if not img:
@@ -245,6 +256,119 @@ def portainer_compose_image(project, service):
         return img, None
     except Exception as exc:  # noqa: BLE001
         return None, f"portainer api error: {exc}"
+
+
+# --------------------------------------------------------------------------
+# docker backend abstraction — the user picks one of two transports:
+#   DOCKER_BACKEND=socket    -> /var/run/docker.sock directly
+#   DOCKER_BACKEND=portainer -> Portainer API
+# --------------------------------------------------------------------------
+class BackendConfigError(RuntimeError):
+    """Selected backend is not usable -> HTTP400."""
+
+
+class SocketBackend:
+    name = "socket"
+
+    def inspect(self, container):
+        return docker_get(f"/containers/{container}/json")
+
+    def restart(self, container):
+        status, body = docker_request("POST", f"/containers/{container}/restart?t=10")
+        if status not in (200, 204):
+            raise RuntimeError(f"docker restart -> {status}: {body[:200]!r}")
+
+    def compose_image(self, project, service):
+        return None, ("compose cross-check requires DOCKER_BACKEND=portainer "
+                      "(a raw socket cannot read host compose files)")
+
+
+class PortainerBackend:
+    name = "portainer"
+
+    def __init__(self):
+        if not (PORTAINER_URL or PORTAINER_TOKEN):
+            raise BackendConfigError(
+                "DOCKER_BACKEND=portainer requires PORTAINER_URL and PORTAINER_TOKEN")
+        if not (PORTAINER_URL and PORTAINER_TOKEN):
+            raise BackendConfigError(
+                "DOCKER_BACKEND=portainer needs both PORTAINER_URL and PORTAINER_TOKEN")
+        self._ep = None
+
+    def _api(self, path, method="GET", data=None):
+        req = urllib.request.Request(
+            PORTAINER_URL + path,
+            data=(json.dumps(data).encode() if data is not None else None),
+            headers={"X-API-Key": PORTAINER_TOKEN,
+                     "Content-Type": "application/json"},
+            method=method)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+            return json.loads(raw) if raw else {}
+
+    def endpoint_id(self):
+        if self._ep is not None:
+            return self._ep
+        endpoints = self._api("/api/endpoints")
+        docker_eps = [e for e in endpoints if str(e.get("Type")) == "1"]
+        want = os.environ.get("PORTAINER_ENDPOINT", "").strip()
+        if want:
+            match = next((e for e in docker_eps
+                          if str(e.get("Id")) == want or e.get("Name") == want), None)
+            if not match:
+                raise BackendConfigError(f"portainer endpoint {want!r} not found")
+        elif len(docker_eps) == 1:
+            match = docker_eps[0]
+        elif not docker_eps:
+            raise BackendConfigError("no docker endpoint found in portainer")
+        else:
+            raise BackendConfigError(
+                "multiple docker endpoints — set PORTAINER_ENDPOINT=<name-or-id>")
+        self._ep = match["Id"]
+        return self._ep
+
+    def _docker(self, path, method="GET", data=None):
+        return self._api(f"/api/endpoints/{self.endpoint_id()}/docker{path}",
+                         method=method, data=data)
+
+    def inspect(self, container):
+        return self._docker(f"/containers/{container}/json")
+
+    def restart(self, container):
+        self._docker(f"/containers/{container}/restart?t=10", method="POST", data={})
+
+    def compose_image(self, project, service):
+        return portainer_compose_image(self._api, project, service)
+
+
+def get_backend():
+    mode = DOCKER_BACKEND
+    if mode == "auto":
+        mode = "portainer" if (PORTAINER_URL and PORTAINER_TOKEN) else "socket"
+    if mode == "portainer":
+        return PortainerBackend()
+    if mode == "socket":
+        if not os.path.exists(DOCKER_SOCK):
+            raise BackendConfigError(
+                f"docker socket {DOCKER_SOCK} not found — configure "
+                "DOCKER_BACKEND=portainer or fix DOCKER_SOCK")
+        return SocketBackend()
+    raise BackendConfigError(
+        f"unknown DOCKER_BACKEND={DOCKER_BACKEND!r} (use auto, socket or portainer)")
+
+
+def poll_tinyauth_health(timeout=30):
+    """Wait until tinyauth answers its health endpoint (used after restarts)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(TINYAUTH_HEALTH_URL, timeout=3) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(1)
+    return False
 
 
 # --------------------------------------------------------------------------
@@ -311,7 +435,15 @@ def index():
 
 @app.get("/api/me")
 def me():
-    return jsonify(username=g.user, role=g.role,
+    has_totp = False
+    try:
+        for _, u, parts in _iter_entries(_read_text(users_file_path()).split("\n")):
+            if u == g.user:
+                has_totp = len(parts) >= 3 and bool(parts[2])
+                break
+    except OSError:
+        pass  # degrade gracefully: account view shows "enable TOTP"
+    return jsonify(username=g.user, role=g.role, has_totp=has_totp,
                    admin_configured=bool(ADMIN_USERS))
 
 
@@ -361,16 +493,21 @@ def admin_sessions():
 @admin_bp.get("/image")
 def admin_image():
     try:
-        info = docker_get(f"/containers/{TINYAUTH_CONTAINER}/json")
+        backend = get_backend()
+    except BackendConfigError as exc:
+        return jsonify(error=str(exc)), 400
+    try:
+        info = backend.inspect(TINYAUTH_CONTAINER)
     except Exception as exc:  # noqa: BLE001
-        return jsonify(error=f"docker socket unavailable: {exc}"), 502
+        return jsonify(error=f"container inspect failed: {exc}"), 502
 
     labels = (info.get("Config") or {}).get("Labels") or {}
     project = labels.get("com.docker.compose.project", "")
     service = labels.get("com.docker.compose.service", "")
-    compose_image, compose_err = portainer_compose_image(project, service)
+    compose_image, compose_err = backend.compose_image(project, service)
 
     return jsonify(
+        backend=backend.name,
         container_name=TINYAUTH_CONTAINER,
         container_image=(info.get("Config") or {}).get("Image"),
         compose_image=compose_image,
@@ -385,9 +522,365 @@ def admin_image():
     )
 
 
+# --------------------------------------------------------------------------
+# users-file operations — faithful port of the CLI's battle-tested semantics
+# (atomic replace, .bak backup, post-check, $$ unescape, TOTP field handling)
+# --------------------------------------------------------------------------
+def users_file_path():
+    return session_params()["users_file"]
+
+
+def _read_text(path):
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+def _split_user_line(line):
+    """-> (username, parts) with tinyauth's $$ unescape, or (None, None)."""
+    s = line.replace("$$", "$") if "$$" in line else line
+    parts = s.split(":", 2)
+    if len(parts) < 2 or not parts[0].strip() or not parts[1].strip():
+        return None, None
+    return parts[0].strip(), [p.strip() for p in parts]
+
+
+def _iter_entries(lines):
+    """yield (index, username, parts) for real user lines (keeps raw others)."""
+    for i, line in enumerate(lines):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        u, parts = _split_user_line(line)
+        if u:
+            yield i, u, parts
+
+
+def _backup(path):
+    shutil.copy2(path, path + ".bak")
+
+
+def _atomic_write(path, text):
+    mode = stat.S_IMODE(os.stat(path).st_mode)
+    tmp = f"{path}.tmp.{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+def validate_username(username):
+    username = (username or "").strip()
+    if not username:
+        raise ValueError("username is empty")
+    if len(username) > 64:
+        raise ValueError("username too long (max 64)")
+    if ":" in username:
+        raise ValueError("username cannot contain ':'")
+    if any(c.isspace() for c in username):
+        raise ValueError("username cannot contain whitespace")
+    return username
+
+
+def hash_password(password):
+    if not password or len(password) < 8:
+        raise ValueError("password must be at least 8 characters")
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def add_user(username, password):
+    username = validate_username(username)
+    path = users_file_path()
+    text = _read_text(path)
+    if username in [u for _, u, _ in _iter_entries(text.split("\n"))]:
+        raise ValueError(f"user {username!r} already exists")
+    if text and not text.endswith("\n"):
+        text += "\n"
+    text += f"{username}:{hash_password(password)}\n"
+    _backup(path)
+    _atomic_write(path, text)
+    if username not in [u for _, u, _ in _iter_entries(_read_text(path).split("\n"))]:
+        raise RuntimeError("post-check failed: user not in file after append")
+    return username
+
+
+def set_password(username, password):
+    path = users_file_path()
+    lines = _read_text(path).split("\n")
+    entries = list(_iter_entries(lines))
+    if username not in [u for _, u, _ in entries]:
+        raise KeyError(f"user {username!r} not found")
+    new_hash = hash_password(password)
+    for i, u, parts in entries:
+        if u == username:
+            rebuilt = f"{username}:{new_hash}"
+            if len(parts) >= 3 and parts[2]:
+                rebuilt += ":" + parts[2]     # preserve the TOTP field
+            lines[i] = rebuilt
+            break
+    _backup(path)
+    _atomic_write(path, "\n".join(lines))
+    if new_hash not in _read_text(path):
+        raise RuntimeError("post-check failed: password not updated")
+    return username
+
+
+def flush_sessions(username=None):
+    if not os.path.exists(DB_PATH):
+        raise FileNotFoundError(f"session db not found: {DB_PATH}")
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    try:
+        if username is None:
+            cur = conn.execute("DELETE FROM sessions")
+        else:
+            cur = conn.execute("DELETE FROM sessions WHERE username = ?", (username,))
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
+def delete_user(username):
+    path = users_file_path()
+    lines = _read_text(path).split("\n")
+    entries = list(_iter_entries(lines))
+    if username not in [u for _, u, _ in entries]:
+        raise KeyError(f"user {username!r} not found")
+    if len(entries) <= 1:
+        raise ValueError("refusing to delete the last user (would lock everyone out)")
+    target = next(i for i, u, _ in entries if u == username)
+    del lines[target]
+    _backup(path)
+    _atomic_write(path, "\n".join(lines))
+    if username in [u for _, u, _ in _iter_entries(_read_text(path).split("\n"))]:
+        raise RuntimeError("post-check failed: user still in file")
+    return flush_sessions(username)
+
+
+# --------------------------------------------------------------------------
+# TOTP — secrets are plain base32, verification is RFC6238 ±1 window
+# (same behavior as tinyauth's totp.Validate)
+# --------------------------------------------------------------------------
+def totp_generate_secret():
+    return base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
+
+
+def totp_url(username, secret):
+    return (f"otpauth://totp/Tinyauth:{username}?secret={secret}"
+            f"&issuer=Tinyauth&algorithm=SHA1&digits=6&period=30")
+
+
+def totp_verify(secret, code):
+    code = (code or "").strip()
+    if not secret or not code.isdigit():
+        return False
+    try:
+        key = base64.b32decode(secret.upper() + "=" * ((8 - len(secret) % 8) % 8))
+    except Exception:  # noqa: BLE001
+        return False
+    counter_now = int(time.time()) // 30
+    for counter in (counter_now - 1, counter_now, counter_now + 1):
+        if counter < 0:
+            continue
+        digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
+        offset = digest[19] & 0xF
+        value = (struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF) % 1000000
+        if f"{value:06d}" == code:
+            return True
+    return False
+
+
+def set_totp(username, action, secret=None, code=None):
+    path = users_file_path()
+    lines = _read_text(path).split("\n")
+    entries = list(_iter_entries(lines))
+    entry = next(((i, p) for i, u, p in entries if u == username), None)
+    if entry is None:
+        raise KeyError(f"user {username!r} not found")
+    idx, parts = entry
+    has_totp = len(parts) >= 3 and bool(parts[2])
+
+    if action == "remove":
+        if not has_totp:
+            raise ValueError(f"user {username!r} has no TOTP to remove")
+        lines[idx] = f"{username}:{parts[1]}"
+    elif action in ("enable", "rebind"):
+        if action == "enable" and has_totp:
+            raise ValueError(f"user {username!r} already has TOTP — use rebind")
+        if action == "rebind" and not has_totp:
+            raise ValueError(f"user {username!r} has no TOTP — use enable first")
+        if secret is None:
+            return {"phase": "verify", "action": action}   # generate phase, no write
+        if not totp_verify(secret, code):
+            raise ValueError("TOTP code incorrect — nothing saved")
+        lines[idx] = f"{username}:{parts[1]}:{secret}"
+    else:
+        raise ValueError("action must be enable, rebind or remove")
+
+    _backup(path)
+    _atomic_write(path, "\n".join(lines))
+
+    after = list(_iter_entries(_read_text(path).split("\n")))
+    aparts = next((p for _, u, p in after if u == username), None)
+    if aparts is None:
+        raise RuntimeError("post-check failed: user vanished from file")
+    if action == "remove" and len(aparts) >= 3 and aparts[2]:
+        raise RuntimeError("post-check failed: TOTP still present")
+    if action in ("enable", "rebind") and not (len(aparts) >= 3 and aparts[2]):
+        raise RuntimeError("post-check failed: TOTP not saved")
+    return {"saved": True, "action": action}
+
+
+# --------------------------------------------------------------------------
+# restart-after-change (tinyauth loads the users file only at startup)
+# --------------------------------------------------------------------------
+def after_user_change():
+    try:
+        backend = get_backend()
+        backend.restart(TINYAUTH_CONTAINER)
+    except Exception as exc:  # noqa: BLE001 - file change stays, report honestly
+        return False, str(exc)
+    if poll_tinyauth_health():
+        return True, None
+    return False, "restarted but health endpoint did not answer in time"
+
+
+def handle_totp(username, body):
+    """Shared TOTP flow for admin and self-service routes."""
+    action = body.get("action")
+    if action not in ("enable", "rebind", "remove"):
+        return jsonify(error="action must be enable, rebind or remove"), 400
+    secret = body.get("secret")
+    code = body.get("code")
+    try:
+        if action == "remove":
+            set_totp(username, "remove")
+        elif secret:
+            set_totp(username, action, secret=secret, code=code)
+        else:
+            set_totp(username, action)          # precondition check only
+            new_secret = totp_generate_secret()
+            return jsonify(ok=True, phase="verify", action=action,
+                           username=username, secret=new_secret,
+                           otpauth=totp_url(username, new_secret))
+    except KeyError as exc:
+        return jsonify(error=str(exc.args[0])), 404
+    except (ValueError, RuntimeError) as exc:
+        return jsonify(error=str(exc)), 400
+
+    restart_ok, restart_err = after_user_change()
+    return jsonify(ok=True, phase="saved", action=action, username=username,
+                   restart_ok=restart_ok, restart_error=restart_err)
+
+
+# ---- admin mutations ----
+
+@admin_bp.post("/users")
+def create_user():
+    body = request.get_json(silent=True) or {}
+    try:
+        username = add_user(body.get("username", ""), body.get("password", ""))
+    except (ValueError, RuntimeError) as exc:
+        return jsonify(error=str(exc)), 400
+    restart_ok, restart_err = after_user_change()
+    return jsonify(ok=True, username=username,
+                   restart_ok=restart_ok, restart_error=restart_err)
+
+
+@admin_bp.post("/users/<username>/password")
+def change_password(username):
+    body = request.get_json(silent=True) or {}
+    try:
+        set_password(username, body.get("password", ""))
+    except KeyError as exc:
+        return jsonify(error=str(exc.args[0])), 404
+    except (ValueError, RuntimeError) as exc:
+        return jsonify(error=str(exc)), 400
+    restart_ok, restart_err = after_user_change()
+    return jsonify(ok=True, username=username,
+                   restart_ok=restart_ok, restart_error=restart_err)
+
+
+@admin_bp.post("/users/<username>/totp")
+def admin_user_totp(username):
+    return handle_totp(username, request.get_json(silent=True) or {})
+
+
+@admin_bp.delete("/users/<username>")
+def remove_user(username):
+    try:
+        flushed = delete_user(username)
+    except KeyError as exc:
+        return jsonify(error=str(exc.args[0])), 404
+    except (ValueError, RuntimeError) as exc:
+        return jsonify(error=str(exc)), 400
+    restart_ok, restart_err = after_user_change()
+    return jsonify(ok=True, username=username, sessions_flushed=flushed,
+                   restart_ok=restart_ok, restart_error=restart_err)
+
+
+@admin_bp.post("/flush")
+def flush_sessions_route():
+    body = request.get_json(silent=True) or {}
+    try:
+        if body.get("all") is True:
+            removed = flush_sessions(None)
+            scope = "all"
+        else:
+            target = (body.get("username") or "").strip()
+            if not target:
+                return jsonify(error="provide username or all=true"), 400
+            removed = flush_sessions(target)
+            scope = target
+    except FileNotFoundError as exc:
+        return jsonify(error=str(exc)), 500
+    return jsonify(ok=True, scope=scope, removed=removed)
+
+
+@admin_bp.post("/restart")
+def restart_container():
+    body = request.get_json(silent=True) or {}
+    if body.get("scope", "container") != "container":
+        return jsonify(error="only scope=container is supported"), 400
+    try:
+        backend = get_backend()
+    except BackendConfigError as exc:
+        return jsonify(error=str(exc)), 400
+    started = time.time()
+    try:
+        backend.restart(TINYAUTH_CONTAINER)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify(error=f"restart failed: {exc}", backend=backend.name), 502
+    healthy = poll_tinyauth_health()
+    return jsonify(ok=True, backend=backend.name, healthy=healthy,
+                   waited_s=round(time.time() - started, 1),
+                   warning=(None if healthy else
+                            "container restarted but health check has not passed yet"))
+
+
+# ---- self-service (username is ALWAYS taken from the identity chain) ----
+self_bp = Blueprint("self", __name__, url_prefix="/api/me")
+
+
+@self_bp.post("/password")
+def self_password():
+    body = request.get_json(silent=True) or {}
+    try:
+        set_password(g.user, body.get("password", ""))
+    except (ValueError, RuntimeError) as exc:
+        return jsonify(error=str(exc)), 400
+    restart_ok, restart_err = after_user_change()
+    return jsonify(ok=True, username=g.user,
+                   restart_ok=restart_ok, restart_error=restart_err)
+
+
+@self_bp.post("/totp")
+def self_totp():
+    return handle_totp(g.user, request.get_json(silent=True) or {})
+
+
 # register AFTER all admin routes are defined (blueprints snapshot their
 # deferred routes at registration time)
 app.register_blueprint(admin_bp)
+app.register_blueprint(self_bp)
 
 
 @app.errorhandler(404)

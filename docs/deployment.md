@@ -61,10 +61,19 @@
 |---|---|---|---|
 | `ADMIN_USERS` | container env | **yes** (for admin features) | tinyauth username(s) with full power, comma separated. **Fail-closed: unset = nobody is admin.** |
 | `GATEWAY_TOKEN` | container env | strongly recommended | shared secret injected by the reverse proxy; requests without it get 403 (anti-spoofing) |
+| `DOCKER_BACKEND` | container env | no (`auto`) | which transport drives restart/inspect: `auto` (default: Portainer API when configured, else docker socket), `socket`, `portainer` |
+| `PORTAINER_URL` + `PORTAINER_TOKEN` | container env | for Portainer mode | Portainer base URL + API key (also enables the compose-image cross-check) |
+| `PORTAINER_ENDPOINT` | container env | only with several docker endpoints | endpoint name or id to target |
+| `TINYAUTH_HEALTH_URL` | container env | no | health endpoint polled after restarts (default `http://tinyauth:3002/api/healthz`) |
 | `TINYAUTH_DATA_VOLUME` | compose / `.env` (Mode B) | Mode B | real name of the tinyauth data volume |
 | `PROXY_NETWORK` | compose / `.env` (Mode B) | Mode B | real name of the proxy docker network |
-| `PORTAINER_URL` + `PORTAINER_TOKEN` | container env | no | enables the compose-image cross-check via the Portainer API |
 | `TZ` | container env | no | timezone |
+
+> **Choosing the docker transport**: with `DOCKER_BACKEND=portainer` the
+> container talks only to the Portainer API — you can then **remove the
+> `docker.sock` mount** entirely (smaller attack surface). With `socket` (or
+> `auto` without Portainer env), the classic `/var/run/docker.sock` mount is
+> used. The compose-image cross-check is only available in Portainer mode.
 
 ## Reverse proxy
 
