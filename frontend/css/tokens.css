@@ -80,6 +80,7 @@
 
 	/* -- pushbot cards & fields -- */
 	--card-bg: #ffffff;
+	--modal-bg: #ffffff;   /* modal: fully opaque in light */
 	--card-border: rgba(148, 163, 184, 0.22);
 	--card-shadow:
 		0 10px 28px rgba(15, 23, 42, 0.14),
@@ -155,6 +156,7 @@
 	--ok-grad: linear-gradient(135deg, #38a86f, #2f8f5d);
 
 	--card-bg: rgba(22, 29, 44, 0.74);
+	--modal-bg: rgba(24, 32, 48, 0.96);   /* modal: near-opaque — page must not bleed through */
 	--card-border: rgba(255, 255, 255, 0.10);
 	--card-shadow:
 		0 10px 28px rgba(0, 0, 0, 0.45),
