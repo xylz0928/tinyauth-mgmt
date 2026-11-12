@@ -44,15 +44,24 @@
 		return h > 0 ? h + "h " + m + "m" : m + "m";
 	}
 
-	/* uuid for the sessions table: wrap every9 characters (8 hex + the dash)
-	   so the column stays narrow on mobile screens */
+	/* uuid for the sessions table — forced wrap per the author's layout:
+	   line1 = first8 hex + the dash; the remainder packs into lines of at
+	   most14 chars broken at hyphens (a continuation line may LEAD with the
+	   hyphen), e.g. "4ea415e9-" / "be95-4506-a514" / "-a4d8d54204e2".
+	   Keeps the column narrow on mobile screens. */
 	function fmtUuid(u) {
 		u = String(u || "");
-		var parts = [];
-		for (var i = 0; i < u.length; i += 9) {
-			parts.push(esc(u.slice(i, i + 9)));
+		if (u.length <= 9) return esc(u);
+		var lines = [u.slice(0, 9)];
+		var rest = u.slice(9);
+		while (rest.length > 14) {
+			var cut = rest.lastIndexOf("-", 14);
+			if (cut < 1) cut = 14;
+			lines.push(rest.slice(0, cut));
+			rest = rest.slice(cut);
 		}
-		return parts.join("<br>");
+		lines.push(rest);
+		return lines.map(esc).join("<br>");
 	}
 
 	/* api() → parsed JSON; throws {status, message} on failure */
