@@ -323,7 +323,8 @@ def main():
               (b.get(k, {}).get("epoch") is not None) or b.get(k, {}).get("error")
               for k in ("tinyauth", "ntp")), f"{st} {b}")
         t("time endpoint: display_tz present (never hardcoded)",
-          st == 200 and isinstance(b.get("display_tz"), str) and b["display_tz"],
+          st == 200 and isinstance(b.get("display_tz"), str) and b["display_tz"]
+          and b.get("display_tz_source") in ("TZ env", "/etc/localtime", "default"),
           f"{st} {b}")
         t("time endpoint: ntp carries cache age (projection transparency)",
           st == 200 and ("age" in b.get("ntp", {}) or b.get("ntp", {}).get("error")),

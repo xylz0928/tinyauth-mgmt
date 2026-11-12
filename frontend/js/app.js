@@ -621,8 +621,12 @@
 			 (typeof t.ntp.age === "number" && t.ntp.age >=1
 				? " · queried " + Math.round(t.ntp.age) + "s ago" : ""));
 		return "<h2 class=\"card-title\">Time</h2>" +
-			"<p class=\"card-desc\">Four sources · every row rendered in <strong>" +
-			esc(t.display_tz || "UTC") + "</strong> (tinyauth-mgmt's TZ) · " +
+			"<p class=\"card-desc\">Base timezone <span class=\"tag\">" +
+			esc(t.display_tz || "UTC") + "</span> " +
+			"<span class=\"field-hint\">(from " +
+			esc(t.display_tz_source === "TZ env" ? "tinyauth-mgmt's TZ env"
+				: t.display_tz_source || "default") + " · every row below " +
+			"renders in it)</span><br>" +
 			"one snapshot every30s — polling stops while this tab or view is " +
 			"inactive · drift &gt; 5s can break TOTP</p>" +
 			"<div class=\"table-wrap\"><table class=\"data\"><thead><tr>" +

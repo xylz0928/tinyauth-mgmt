@@ -1029,8 +1029,8 @@ def _backend_time():
             "error": None}
 
 
-def _display_tz():
-    """IANA timezone the Time card must render everything in.
+def _display_tz_info():
+    """(IANA timezone, source) the Time card must render everything in.
 
     Priority: TZ env (what the operator configured in compose) -> the
     /etc/localtime symlink (read-only host mount) -> raw TZ -> UTC.
@@ -1038,21 +1038,22 @@ def _display_tz():
     """
     tz = os.environ.get("TZ", "").lstrip(":")
     if tz and "/" in tz:
-        return tz
+        return tz, "TZ env"
     try:
         target = os.readlink("/etc/localtime")
         marker = "/usr/share/zoneinfo/"
         if marker in target:
-            return target.split(marker,1)[1]
+            return target.split(marker,1)[1], "/etc/localtime"
     except OSError:
         pass
-    return tz or "UTC"
+    return (tz or "UTC"), ("TZ env" if tz else "default")
 
 
 @admin_bp.get("/time")
 def admin_time():
+    tz, tz_source = _display_tz_info()
     return jsonify(backend=_backend_time(), tinyauth=_tinyauth_time(),
-                   ntp=_ntp_time(), display_tz=_display_tz(),
+                   ntp=_ntp_time(), display_tz=tz, display_tz_source=tz_source,
                    generated_at=round(time.time(),3))
 
 
