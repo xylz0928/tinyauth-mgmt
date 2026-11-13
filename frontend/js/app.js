@@ -533,10 +533,19 @@
 				var st = s.status;
 				var cls = st === "active" ? "success" : (st === "expired" ? "error" : "warn");
 				var flags = (s.flags || []).map(function (f) {
+					var m = /^renewed\u2248(.+)$/.exec(f);
+					if (m) {
+						var seg = m[1].split(" ");
+						var times = seg.slice(1).join(" ");
+						return "<span class=\"tag tag-wrapped\">renewed\u2248<br>" +
+							esc(seg[0]) + (times ? "<br>" + esc(times) : "") + "</span>";
+					}
 					return "<span class=\"tag\">" + esc(f) + "</span>";
 				}).join(" ");
 				return "<div class=\"session-item\">" +
-					"<span class=\"s-uuid chip uuid-chip\">" + fmtUuid(s.uuid) + "</span>" +
+					"<span class=\"s-uuid chip uuid-chip\"><span class=\"uu-wide\">" +
+					esc(s.uuid) + "</span><span class=\"uu-narrow\">" +
+					fmtUuid(s.uuid) + "</span></span>" +
 					"<div class=\"s-body\">" +
 						"<div class=\"s-line s-l1\">" +
 							field(t("f.user"), "<strong>" + esc(s.username) + "</strong>") +

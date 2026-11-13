@@ -638,41 +638,40 @@ table.data tbody tr:last-child td { border-bottom: none; }
 
 /* --------------------------------------------------------------------------
    Sessions: responsive item cards
-   wide  -> one horizontal strip: USER PROVIDER FLAGS | CREATED EXPIRES
-            REMAINING | STATUS Kick   (uuid hidden)
+   wide  -> shared subgrid columns (every row aligns to the widest cell):
+            UUID | USER PROVIDER FLAGS | CREATED EXPIRES REMAINING |
+            STATUS Kick   (uuid = raw single line)
    narrow -> uuid block on the left (wraps, so it is tall) + three lines:
             L1 USER PROVIDER FLAGS / L2 CREATED EXPIRES REMAINING /
             L3 STATUS Kick
    -------------------------------------------------------------------------- */
-.session-list { display: flex; flex-direction: column; }
+.session-list {
+	display: grid;
+	grid-template-columns: repeat(9, max-content);
+	justify-content: space-between;
+	column-gap: 24px;
+	overflow-x: auto;
+}
 
 .session-item {
-	display: flex;
-	align-items: flex-start;
-	gap: 14px;
-	padding:14px 4px;
+	display: grid;
+	grid-column: 1 / -1;
+	grid-template-columns: subgrid;
+	align-items: start;
+	padding: 14px 4px;
 	border-bottom: 1px solid var(--border-color-low);
 }
 .session-item:last-child { border-bottom: none; }
 
-.s-uuid { display: none; }
-
-.s-body {
-	flex: 1;
-	min-width: 0;
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: space-between;
-	gap:8px 28px;
-	align-items: center;
+.s-uuid {
+	display: block;
+	align-self: center;
 }
+.uu-narrow { display: none; }
 
-.s-line {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px 14px;
-	align-items: center;
-}
+.s-body { display: contents; }
+
+.s-line { display: contents; }
 
 .s-field {
 	display: inline-flex;
@@ -687,6 +686,12 @@ table.data tbody tr:last-child td { border-bottom: none; }
 	white-space: nowrap;
 }
 .s-flags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+
+.tag.tag-wrapped {
+	white-space: normal;
+	text-align: center;
+	line-height: 1.35;
+}
 
 @media (max-width:768px) {
 	/* four-row / three-column card:
@@ -709,12 +714,14 @@ table.data tbody tr:last-child td { border-bottom: none; }
 		align-self:center;
 	}
 	.s-body { display:contents; }        /* children join the item grid */
-	.s-l1 { grid-area:l1; }
+	.s-l1 { display: flex; grid-area: l1; gap: 6px 12px; }
 	.cell-created { grid-area:cr; }
 	.cell-expires { grid-area:ex; }
 	.cell-remaining { grid-area:rm; }
 	.s-status { grid-area:status; align-self:center; }
 	.s-kick { grid-area:kick; align-self:center; justify-self:start; }
+	.uu-wide { display: none; }
+	.uu-narrow { display: inline; }
 	.s-val { white-space:normal; }
 }
 
