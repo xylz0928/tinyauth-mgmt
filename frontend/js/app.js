@@ -632,10 +632,10 @@
 							"<span class=\"badge " + cls + "\">" + esc(st) + "</span>",
 							"s-status") +
 						"<span class=\"s-field s-kick\">" +
-							"<button class=\"btn small danger\" data-kick-s=\"" + esc(s.uuid) + "\">" +
-							t("btn.kick_session") + "</button>" +
-							"<button class=\"btn small danger\" data-kick-u=\"" + esc(s.username) + "\">" +
-							t("btn.kick_user") + "</button></span>" +
+							"<button class=\"btn small danger\" data-kick " +
+							"data-kick-uuid=\"" + esc(s.uuid) +
+							"\" data-kick-user=\"" + esc(s.username) + "\">" +
+							t("btn.kick") + "</button></span>" +
 					"</div>" +
 				"</div>";
 			}).join("");
@@ -671,38 +671,42 @@
 				}
 			});
 
-			v.querySelectorAll("button[data-kick-s]").forEach(function (btn) {
-				btn.addEventListener("click", async function () {
-					var uuid = btn.dataset.kickS;
-					var ok = await confirmModal({
-						title: t("kick1.title"),
-						message: t("kick1.msg"),
-						confirmLabel: t("kick1.confirm")
-					});
-					if (!ok) return;
-					try {
-						var res = await apiPost("/api/admin/flush", { uuid: uuid });
-						toast(t("kick1.done") + (res.removed ? " (" + res.removed + ")" : ""),
-							"success");
+			/* one kick button -> modal offering both scopes (session / whole user) */
+			function kickModal(s) {
+				modal({
+					title: t("kick.title", { user: s.username }),
+					body: "<p>" + t("kick.pick") + "</p>" +
+						"<p style=\"opacity:.75\">" + esc(s.username) + " · " +
+						esc(s.uuid) + "</p>",
+					buttons: [
+						{ label: t("btn.kick_session"), kind: "primary", id: "one" },
+						{ label: t("btn.kick_user"), kind: "danger", id: "user" },
+						{ label: t("common.cancel"), id: "cancel" }
+					],
+					onAction: async function (id) {
+						if (id === "cancel") return true;
+						if (id === "one") {
+							var r = await apiPost("/api/admin/flush",
+								{ uuid: s.uuid });
+							toast(t("kick1.done") +
+								(r.removed ? " (" + r.removed + ")" : ""),
+								"success");
+						} else {
+							var r2 = await apiPost("/api/admin/flush",
+								{ username: s.username });
+							toast(t("kick.done",
+								{ n: r2.removed, user: s.username }), "success");
+						}
 						refresh();
-					} catch (e) { toast(e.message || t("common.failed"), "error"); }
+						return true;
+					}
 				});
-			});
+			}
 
-			v.querySelectorAll("button[data-kick-u]").forEach(function (btn) {
-				btn.addEventListener("click", async function () {
-					var user = btn.dataset.kickU;
-					var ok = await confirmModal({
-						title: t("kick.title", { user: user }),
-						message: t("kick.msg", { user: user }),
-						confirmLabel: t("kick.confirm", { user: user })
-					});
-					if (!ok) return;
-					try {
-						var res = await apiPost("/api/admin/flush", { username: user });
-						toast(t("kick.done", { n: res.removed, user: user }), "success");
-						refresh();
-					} catch (e) { toast(e.message || t("common.failed"), "error"); }
+			v.querySelectorAll("button[data-kick]").forEach(function (btn) {
+				btn.addEventListener("click", function () {
+					kickModal({ uuid: btn.dataset.kickUuid,
+						username: btn.dataset.kickUser });
 				});
 			});
 
