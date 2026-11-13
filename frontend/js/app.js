@@ -141,8 +141,7 @@
 				}
 				if (!best) throw new Error("no version in readme");
 				if (verGt(best, current)) {
-					showVerCard(t("update.found",
-							{ latest: best, current: current }),
+					showVerCard(t("update.found"),
 						current + " \u2192 " + best, "is-update",
 						[{ label: t("update.btn_repo"), onClick: function () {
 							window.open("https://github.com/xylz0928/tinyauth-mgmt",
