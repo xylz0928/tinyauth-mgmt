@@ -19,21 +19,11 @@
 
 	function $(id) { return document.getElementById(id); }
 
-	function toast(msg, kind, link) {
+	function toast(msg, kind) {
 		var layer = $("toast-layer");
 		var el = document.createElement("div");
 		el.className = "toast" + (kind ? " " + kind : "");
 		el.textContent = msg;
-		if (link && link.href) {
-			var la = document.createElement("a");
-			la.href = link.href;
-			la.target = "_blank";
-			la.rel = "noopener";
-			la.textContent = link.label || "\u2192";
-			la.style.cssText = "margin-left:8px;font-weight:700;color:inherit;" +
-				"text-decoration:underline;";
-			el.appendChild(la);
-		}
 		layer.appendChild(el);
 		setTimeout(function () {
 			el.classList.add("out");
@@ -55,19 +45,65 @@
 		return false;
 	}
 
-	/* online update check, modeled on luci-app-pushbot's status page:
-	   fetch remote version markers (github tags), compare, toast.
-	   - throttled to once/6h via sessionStorage (github api rate limit)
-	   - found -> warn toast + version badge becomes a release link
-	   - latest -> success toast (auto-hides, pushbot's "already latest")
-	   - offline/error -> silent (never alarm the admin over a network flap) */
+	/* OTA update card — modeled on luci-app-pushbot's version-badge check:
+	   click the version badge -> is-checking -> fetch github tags -> frosted
+	   card. States: violet ahead / green latest / orange update / red error.
+	   Cards without buttons auto-hide after4s; the update card carries a
+	   GitHub action button and stays until the next badge click. */
+	function showVerCard(msg, sub, cls, buttons) {
+		var ov = document.createElement("div");
+		ov.className = "tm-ver-overlay";
+		var card = document.createElement("div");
+		card.className = "tm-ver-toast " + cls;
+		var mEl = document.createElement("div");
+		mEl.className = "tm-ver-msg";
+		mEl.textContent = msg;
+		card.appendChild(mEl);
+		if (sub) {
+			var sEl = document.createElement("div");
+			sEl.className = "tm-ver-sub";
+			sEl.textContent = sub;
+			card.appendChild(sEl);
+		}
+		if (buttons && buttons.length) {
+			var row = document.createElement("div");
+			row.className = "tm-ota-btn-row";
+			buttons.forEach(function (cfg) {
+				var b = document.createElement("button");
+				b.type = "button";
+				b.className = "tm-ota-btn";
+				b.textContent = cfg.label;
+				b.addEventListener("click", function (e) {
+					e.stopPropagation();
+					if (cfg.onClick) cfg.onClick();
+				});
+				row.appendChild(b);
+			});
+			card.appendChild(row);
+		}
+		ov.appendChild(card);
+		document.body.appendChild(ov);
+		setTimeout(function () { ov.classList.add("show"); },20);
+		var hideId = null;
+		if (!buttons || !buttons.length) {
+			hideId = setTimeout(dismiss,4000);
+		}
+		function dismiss() {
+			if (hideId) clearTimeout(hideId);
+			ov.classList.remove("show");
+			setTimeout(function () { ov.remove(); },350);
+		}
+		return { dismiss: dismiss };
+	}
+
 	function checkForUpdate(current) {
-		var last = 0;
-		try { last = +(sessionStorage.getItem("tm-updchk") || 0); } catch (e) {}
-		if (Date.now() - last < 6 * 3600 * 1000) return;
-		try { sessionStorage.setItem("tm-updchk", String(Date.now())); } catch (e) {}
+		var badge = $("brand-version");
+		var exist = document.querySelector(".tm-ver-overlay");
+		if (exist) exist.remove();
+		if (badge.classList.contains("is-checking")) return;
+		badge.classList.add("is-checking");
 		var ctl = new AbortController();
-		var timer = setTimeout(function () { ctl.abort(); }, 8000);
+		var timer = setTimeout(function () { ctl.abort(); },8000);
 		fetch("https://api.github.com/repos/xylz0928/tinyauth-mgmt/tags?per_page=100",
 			{ signal: ctl.signal, headers: { Accept: "application/vnd.github+json" } })
 			.then(function (r) {
@@ -76,31 +112,33 @@
 			})
 			.then(function (tags) {
 				clearTimeout(timer);
+				badge.classList.remove("is-checking");
 				var best = null;
 				(Array.isArray(tags) ? tags : []).forEach(function (tg) {
 					var name = tg && tg.name;
 					if (verTuple(name) && (!best || verGt(name, best))) best = name;
 				});
-				if (!best) return;
+				if (!best) throw new Error("no tags");
 				if (verGt(best, current)) {
-					toast(t("update.found", { latest: best, current: current }),
-						"warn",
-						{ href: "https://github.com/xylz0928/tinyauth-mgmt/releases",
-						  label: "GitHub" });
-					var v = $("brand-version");
-					v.classList.add("has-update");
-					v.textContent = "";
-					var a = document.createElement("a");
-					a.href = "https://github.com/xylz0928/tinyauth-mgmt/releases";
-					a.target = "_blank";
-					a.rel = "noopener";
-					a.textContent = current + " \u2192 " + best;
-					v.appendChild(a);
+					showVerCard(t("update.found",
+							{ latest: best, current: current }),
+						current + " \u2192 " + best, "is-update",
+						[{ label: "GitHub", onClick: function () {
+							window.open("https://github.com/xylz0928/tinyauth-mgmt/releases",
+								"_blank", "noopener");
+						} }]);
+				} else if (verGt(current, best)) {
+					showVerCard(t("update.ahead"),
+						current + " > " + best, "is-ahead");
 				} else {
-					toast(t("update.latest"), "success");
+					showVerCard(t("update.latest"), current, "is-latest");
 				}
 			})
-			.catch(function () { clearTimeout(timer); /* offline: stay silent */ });
+			.catch(function () {
+				clearTimeout(timer);
+				badge.classList.remove("is-checking");
+				showVerCard(t("update.error"), null, "is-err");
+			});
 	}
 
 	function fmtTime(epoch) {
@@ -1042,7 +1080,14 @@
 				var v = $("brand-version");
 				v.textContent = h.version;
 				v.hidden = false;
-				checkForUpdate(h.version);
+				v.dataset.ver = h.version;
+				v.title = t("update.hint");
+				if (!v._verBound) {
+					v._verBound = true;
+					v.addEventListener("click", function () {
+						checkForUpdate(v.dataset.ver || v.textContent);
+					});
+				}
 			}
 		}).catch(function () { /* version is cosmetic */ });
 

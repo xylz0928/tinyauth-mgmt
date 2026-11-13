@@ -571,11 +571,14 @@ def main():
           "function fmtUuid" in appjs and "fmtUuid(s.uuid)" in appjs,
           "fmtUuid missing/unused in app.js")
         i18nsrc = open(os.path.join(REPO, "frontend/js/i18n.js")).read()
-        t("update check wired (pushbot-style): compare + i18n keys + toast link",
-          "checkForUpdate" in appjs and "verGt" in appjs
+        t("update check wired (pushbot-style): badge click + OTA card + i18n",
+          "checkForUpdate" in appjs and "tm-ver-toast" in appjs
+          and 'v.dataset.ver' in appjs
           and i18nsrc.count('"update.found"') >= 2
           and i18nsrc.count('"update.latest"') >= 2
-          and 'link.href' in appjs,
+          and i18nsrc.count('"update.error"') >= 2
+          and i18nsrc.count('"update.ahead"') >= 2
+          and i18nsrc.count('"update.hint"') >= 2,
           "update-check wiring missing")
         t("i18n wired: index loads i18n.js, app uses __tmI18n, zh dict present",
           'js/i18n.js' in open(os.path.join(REPO, "frontend/index.html")).read()

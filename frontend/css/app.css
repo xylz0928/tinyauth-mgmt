@@ -88,14 +88,83 @@ a:hover { text-decoration: underline; }
 	white-space: nowrap;
 }
 
-.brand-version.has-update {
-	background: rgba(224, 160, 19, .16);
-	color: var(--warn-color-low);
+.brand-version { cursor: pointer; }
+.brand-version.is-checking {
+	animation: ver-pulse 1s ease-in-out infinite alternate;
 }
-.brand-version a {
-	color: inherit;
-	text-decoration: none;
+@keyframes ver-pulse { from { opacity: .35; } to { opacity: .85; } }
+
+/* OTA update card (pushbot-style): fixed under the header, centered */
+.tm-ver-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	display: flex;
+	justify-content: center;
+	padding-top: 60px;
+	pointer-events: none;
+	z-index: 90;
+	opacity: 0;
+	transition: opacity .3s ease;
 }
+.tm-ver-overlay.show { opacity: 1; }
+.tm-ver-toast {
+	pointer-events: auto;
+	min-width: 280px;
+	max-width: 460px;
+	padding: 14px 18px;
+	border-radius: 14px;
+	color: #fff;
+	text-align: center;
+	box-shadow: 0 14px 34px rgba(15, 23, 42, .35);
+	transform: scale(.92) translateY(6px);
+	transition: transform .3s ease;
+}
+.tm-ver-overlay.show .tm-ver-toast { transform: scale(1) translateY(0); }
+/* status colors: ahead=violet, latest=green, update=orange, error=red */
+.tm-ver-toast.is-ahead {
+	background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+	border: 1px solid rgba(167, 139, 250, .45);
+}
+.tm-ver-toast.is-latest {
+	background: var(--ok-grad);
+	border: 1px solid rgba(52, 211, 153, .45);
+}
+.tm-ver-toast.is-update {
+	background: var(--warn-grad);
+	border: 1px solid rgba(251, 146, 60, .5);
+}
+.tm-ver-toast.is-err {
+	background: var(--danger-grad);
+	border: 1px solid rgba(248, 113, 113, .45);
+}
+.tm-ver-msg { font-size: 14px; font-weight: 700; line-height: 1.5; }
+.tm-ver-sub {
+	margin-top: 7px;
+	font-size: 12px;
+	opacity: .9;
+	font-family: var(--font-mono);
+}
+.tm-ota-btn-row {
+	display: flex;
+	gap: 8px;
+	justify-content: center;
+	margin-top: 12px;
+}
+.tm-ota-btn {
+	padding: 5px 14px;
+	border-radius: 8px;
+	border: 1px solid rgba(255, 255, 255, .35);
+	background: rgba(255, 255, 255, .18);
+	color: #fff;
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background .2s, transform .15s;
+}
+.tm-ota-btn:hover { background: rgba(255, 255, 255, .3); transform: translateY(-1px); }
+.tm-ota-btn:active { transform: scale(.96); }
 
 .header-spacer { flex: 1; }
 
