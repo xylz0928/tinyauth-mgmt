@@ -722,7 +722,7 @@ table.data tbody tr:last-child td { border-bottom: none; }
 		grid-template-areas:
 			"uuid l1 status"
 			"uuid cr flg"
-			"uuid ex kick"
+			"uuid ex flg"
 			"uuid rm kick";
 		gap: 8px 12px;
 		align-items: stretch;
