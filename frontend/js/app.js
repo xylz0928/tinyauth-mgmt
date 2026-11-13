@@ -559,8 +559,10 @@
 							"<span class=\"badge " + cls + "\">" + esc(st) + "</span>",
 							"s-status") +
 						"<span class=\"s-field s-kick\">" +
-							"<button class=\"btn small danger\" data-kick=\"" + esc(s.username) + "\">" +
-							t("btn.kick") + "</button></span>" +
+							"<button class=\"btn small danger\" data-kick-s=\"" + esc(s.uuid) + "\">" +
+							t("btn.kick_session") + "</button>" +
+							"<button class=\"btn small danger\" data-kick-u=\"" + esc(s.username) + "\">" +
+							t("btn.kick_user") + "</button></span>" +
 					"</div>" +
 				"</div>";
 			}).join("");
@@ -596,9 +598,27 @@
 				}
 			});
 
-			v.querySelectorAll("button[data-kick]").forEach(function (btn) {
+			v.querySelectorAll("button[data-kick-s]").forEach(function (btn) {
 				btn.addEventListener("click", async function () {
-					var user = btn.dataset.kick;
+					var uuid = btn.dataset.kickS;
+					var ok = await confirmModal({
+						title: t("kick1.title"),
+						message: t("kick1.msg"),
+						confirmLabel: t("kick1.confirm")
+					});
+					if (!ok) return;
+					try {
+						var res = await apiPost("/api/admin/flush", { uuid: uuid });
+						toast(t("kick1.done") + (res.removed ? " (" + res.removed + ")" : ""),
+							"success");
+						refresh();
+					} catch (e) { toast(e.message || t("common.failed"), "error"); }
+				});
+			});
+
+			v.querySelectorAll("button[data-kick-u]").forEach(function (btn) {
+				btn.addEventListener("click", async function () {
+					var user = btn.dataset.kickU;
 					var ok = await confirmModal({
 						title: t("kick.title", { user: user }),
 						message: t("kick.msg", { user: user }),

@@ -475,6 +475,23 @@ def main():
         st, b = req(PORT_MUT, "/api/admin/flush", id_m, method="POST", data={})
         t("flush without target -> 400", st == 400, f"{st} {b}")
 
+        # single-session flush by uuid (new capability)
+        conn = sqlite3.connect(os.path.join(BASE, "tinyauth.db"))
+        now0 = int(time.time())
+        conn.execute("INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                     ("u-temp-1", "ghost", "g@x", "G", "local", 0, None,
+                      now0 + 600, None, None, now0))
+        conn.commit()
+        conn.close()
+        st, b = req(PORT_MUT, "/api/admin/flush", id_admin, "POST",
+                    {"uuid": "u-temp-1"})
+        t("flush by uuid removes exactly one session",
+          st == 200 and b.get("removed") == 1 and db_count() == 0, f"{st}{b}")
+        st, b = req(PORT_MUT, "/api/admin/flush", id_admin, "POST",
+                    {"uuid": "no-such-uuid"})
+        t("flush unknown uuid -> removed0",
+          st == 200 and b.get("removed") == 0, f"{st}{b}")
+
         # --- delete users + last-user guard ---
         st, b = req(PORT_MUT, "/api/admin/users/newbie", id_m, method="DELETE")
         t("delete user ok (file gone, restart fails gracefully)",

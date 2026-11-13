@@ -722,12 +722,14 @@ def set_password(username, password):
     return username
 
 
-def flush_sessions(username=None):
+def flush_sessions(username=None, uuid=None):
     if not os.path.exists(DB_PATH):
         raise FileNotFoundError(f"session db not found: {DB_PATH}")
     conn = sqlite3.connect(DB_PATH, timeout=5)
     try:
-        if username is None:
+        if uuid is not None:
+            cur = conn.execute("DELETE FROM sessions WHERE uuid = ?", (uuid,))
+        elif username is None:
             cur = conn.execute("DELETE FROM sessions")
         else:
             cur = conn.execute("DELETE FROM sessions WHERE username = ?", (username,))
@@ -924,11 +926,16 @@ def flush_sessions_route():
             removed = flush_sessions(None)
             scope = "all"
         else:
-            target = (body.get("username") or "").strip()
-            if not target:
-                return jsonify(error="provide username or all=true"), 400
-            removed = flush_sessions(target)
-            scope = target
+            target_uuid = (body.get("uuid") or "").strip()
+            if target_uuid:
+                removed = flush_sessions(uuid=target_uuid)
+                scope = target_uuid
+            else:
+                target = (body.get("username") or "").strip()
+                if not target:
+                    return jsonify(error="provide username or all=true"), 400
+                removed = flush_sessions(target)
+                scope = target
     except FileNotFoundError as exc:
         return jsonify(error=str(exc)), 500
     return jsonify(ok=True, scope=scope, removed=removed)

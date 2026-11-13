@@ -701,6 +701,8 @@ table.data tbody tr:last-child td { border-bottom: none; }
 }
 .s-flags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 
+.s-kick { gap: 6px; }   /* two kick buttons stacked in the cell */
+
 .tag.tag-wrapped {
 	white-space: normal;
 	text-align: center;
