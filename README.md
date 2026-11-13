@@ -44,7 +44,7 @@ services:
 
   # ---------------- tinyauth-mgmt：管理控制台 ----------------
   tinyauth-mgmt:
-    image: ghcr.io/xylz0928/tinyauth-mgmt:v2.12   # 或 ...:latest 跟随最新
+    image: ghcr.io/xylz0928/tinyauth-mgmt:v2.13   # 或 ...:latest 跟随最新
     container_name: tinyauth-mgmt
     restart: unless-stopped
     environment:
@@ -168,7 +168,7 @@ services:
 
   # ---------------- tinyauth-mgmt: the console ----------------
   tinyauth-mgmt:
-    image: ghcr.io/xylz0928/tinyauth-mgmt:v2.12   # or ...:latest
+    image: ghcr.io/xylz0928/tinyauth-mgmt:v2.13   # or ...:latest
     container_name: tinyauth-mgmt
     restart: unless-stopped
     environment:

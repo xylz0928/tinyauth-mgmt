@@ -186,6 +186,22 @@ a:hover { text-decoration: underline; }
 	padding: 16px 20px 48px;
 }
 
+/* content width:85% of the window, centered (mobile keeps full bleed) */
+.app-header-inner,
+.app-nav,
+.app-main {
+	width: 85%;
+	margin: 0 auto;
+}
+
+@media (max-width:768px) {
+	.app-header-inner,
+	.app-nav,
+	.app-main {
+		width: 100%;
+	}
+}
+
 /* --------------------------------------------------------------------------
    Card — pushbot four-directional shadow
    -------------------------------------------------------------------------- */
