@@ -640,24 +640,52 @@ def admin_sessions():
         ).fetchall()
     sessions = [dict(compute_session(r, now, params["session_expiry"],
                                      params["session_max_lifetime"])) for r in rows]
-    # 每个 session 的登录来源 IP: 关联 tinyauth 审计流（登录成功事件）
+    # 每个 session 的登录来源 IP。
+    # 关联源 = tinyauth 审计流（docker logs），但日志随容器重建销毁，而
+    # session 在卷里永生 —— 所以关联结果必须落盘缓存（共享卷 /data），
+    # 否则每次重新部署 IP 就丢。命中缓存直接用；未命中的现关联后写回。
+    cache_path = os.path.join(DATA_DIR, "mgmt-session-ips.json")
     try:
-        backend = get_backend()
-        since = (min(s["created_at"] for s in sessions) -60
-                 if sessions else int(time.time()) -60)
-        events = parse_login_events(
-            backend.container_logs(TINYAUTH_CONTAINER, since))
+        with open(cache_path, encoding="utf-8") as fh:
+            ip_cache = json.load(fh)
+        if not isinstance(ip_cache, dict):
+            ip_cache = {}
     except Exception:
-        events = []
+        ip_cache = {}
+    pending = [s for s in sessions if s["uuid"] not in ip_cache]
+    if pending:
+        try:
+            backend = get_backend()
+            since = min(s["created_at"] for s in pending) -60
+            events = parse_login_events(
+                backend.container_logs(TINYAUTH_CONTAINER, since))
+        except Exception:
+            events = []
+        for s in pending:
+            best = None
+            for ev in events:
+                if ev["username"] != s["username"]:
+                    continue
+                delta = abs(ev["ts"] - s["created_at"])
+                if delta <=10 and (best is None or delta < best[0]):
+                    best = (delta, ev)
+            if best:
+                ip_cache[s["uuid"]] = best[1]["ip"]
+            elif now - s["created_at"] >60:
+                # settled: audit flush is synchronous with the login request,
+                # so >60s with no event means none will ever appear
+                ip_cache[s["uuid"]] = None
+        alive = {s["uuid"] for s in sessions}
+        ip_cache = {k: v for k, v in ip_cache.items() if k in alive}
+        try:
+            tmp_path = cache_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as fh:
+                json.dump(ip_cache, fh)
+            os.replace(tmp_path, cache_path)
+        except Exception:
+            pass
     for s in sessions:
-        best = None
-        for ev in events:
-            if ev["username"] != s["username"]:
-                continue
-            delta = abs(ev["ts"] - s["created_at"])
-            if delta <=10 and (best is None or delta < best[0]):
-                best = (delta, ev)
-        s["login_ip"] = best[1]["ip"] if best else None
+        s["login_ip"] = ip_cache.get(s["uuid"])
     return jsonify(now=now,
                    session_expiry=params["session_expiry"],
                    session_max_lifetime=params["session_max_lifetime"],

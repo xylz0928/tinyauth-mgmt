@@ -268,6 +268,9 @@ def main():
         t("sessions carry login_ip field",
           all("login_ip" in s for s in b.get("sessions", [])),
           b.get("sessions", [])[:1])
+        t("login_ip cache persists on shared volume",
+          os.path.exists(os.path.join(BASE, "mgmt-session-ips.json")),
+          "cache file not written")
         t("u-admin-1 active", by_id.get("u-admin-1", {}).get("status") == "active")
 
         # login-audit parser + docker log demux (session source-IP)
