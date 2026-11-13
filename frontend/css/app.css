@@ -705,7 +705,7 @@ table.data tbody tr:last-child td { border-bottom: none; }
 		grid-template-columns: auto minmax(0, 1fr) auto;
 		grid-template-areas:
 			"uuid l1 status"
-			"uuid cr status"
+			"uuid cr flg"
 			"uuid ex kick"
 			"uuid rm kick";
 		gap: 8px 12px;
@@ -722,6 +722,7 @@ table.data tbody tr:last-child td { border-bottom: none; }
 	.cell-expires { grid-area: ex; }
 	.cell-remaining { grid-area: rm; }
 	.s-status { grid-area: status; align-self: center; }
+	.s-flags-cell { grid-area: flg; align-self: center; }
 	.s-kick { grid-area: kick; align-self: center; justify-self: start; }
 	.s-val { white-space: normal; }
 }

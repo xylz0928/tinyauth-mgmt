@@ -550,8 +550,8 @@
 						"<div class=\"s-line s-l1\">" +
 							field(t("f.user"), "<strong>" + esc(s.username) + "</strong>") +
 							field(t("f.provider"), esc(s.provider)) +
-							field(t("f.flags"), flags || "—") +
 						"</div>" +
+						field(t("f.flags"), flags || "—", "s-flags-cell") +
 						field(t("f.created"), esc(fmtTime(s.created_at)), "cell-created") +
 						field(t("f.expires"), esc(fmtTime(s.expires_at)), "cell-expires") +
 						field(t("f.remaining"), esc(fmtRemaining(s.remaining)), "cell-remaining") +
