@@ -26,10 +26,13 @@
 		'<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 5.66l1.41-1.41 ' +
 		'M21 12h2M3 12h2M4.93 19.07l1.41-1.41M17.66 18.34l1.41 1.41"/></svg>',
 	dark:
-		'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" ' +
-		'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" ' +
-		'stroke-linejoin="round" aria-hidden="true">' +
-		'<path fill="currentColor" fill-rule="evenodd" d="M12 3 a9 9 0 0 1 0 18 a9 9 0 0 1 0 -18 z M16.5 0.5 a7 7 0 0 1 0 14 a7 7 0 0 1 0 -14 z"/></svg>'
+		'<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">' +
+		'<defs><mask id="tm-moon-mask">' +
+		'<rect width="24" height="24" fill="#000"/>' +
+		'<circle cx="12" cy="12" r="9" fill="#fff"/>' +
+		'<circle cx="16.5" cy="7.5" r="7" fill="#000"/>' +
+		'</mask></defs>' +
+		'<circle cx="12" cy="12" r="9" fill="currentColor" mask="url(#tm-moon-mask)"/></svg>'
 };
 
 	function current() {
