@@ -250,6 +250,50 @@ def docker_get(path):
     return json.loads(body)
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def demux_docker_log(raw):
+    """docker 非 tty 容器日志 =8字节帧流；tty 容器 = 裸文本。两种都兼容。"""
+    if not raw:
+        return b""
+    if (len(raw) >=8 and raw[0] in (0, 1, 2)
+            and raw[1:4] == b"\x00\x00\x00"):
+        out = bytearray()
+        i =0
+        while i +8 <= len(raw):
+            size = int.from_bytes(raw[i +4:i +8], "big")
+            out += raw[i +8:i +8 + size]
+            i +=8 + size
+        return bytes(out)
+    return raw
+
+
+def parse_login_events(raw):
+    """从 tinyauth 审计日志提取成功登录 -> [{ts, username, ip}]。
+
+    审计流默认关闭，需要 tinyauth config: log.streams.audit.enabled=true。
+    关联口径: username 相同且事件时间与 session.created_at 差 <=10s。
+    """
+    events = []
+    text = _ANSI_RE.sub("", demux_docker_log(raw).decode("utf-8", "replace"))
+    for line in text.splitlines():
+        if "event=login" not in line or "result=success" not in line:
+            continue
+        m_ts = re.match(r"(\S+)", line)
+        m_user = re.search(r"\busername=(\S+)", line)
+        m_ip = re.search(r"\bip=(\S+)", line)
+        if not (m_ts and m_user and m_ip):
+            continue
+        try:
+            ts = int(datetime.fromisoformat(m_ts.group(1)).timestamp())
+        except ValueError:
+            continue
+        events.append({"ts": ts, "username": m_user.group(1),
+                       "ip": m_ip.group(1)})
+    return events
+
+
 def parse_service_image(compose_text, service):
     lines = compose_text.splitlines()
     i = 0
@@ -309,6 +353,15 @@ class SocketBackend:
         if status not in (200, 204):
             raise RuntimeError(f"docker restart -> {status}: {body[:200]!r}")
 
+    def container_logs(self, container, since):
+        status, body = docker_request(
+            "GET",
+            f"/containers/{container}/logs?since={since}"
+            "&stdout=true&stderr=true")
+        if status !=200:
+            raise RuntimeError(f"docker logs -> {status}: {body[:200]!r}")
+        return body
+
     def compose_image(self, project, service):
         return None, ("compose cross-check requires DOCKER_BACKEND=portainer "
                       "(a raw socket cannot read host compose files)")
@@ -337,6 +390,14 @@ class PortainerBackend:
             raw = resp.read()
             return json.loads(raw) if raw else {}
 
+    def _raw(self, path):
+        """Raw (non-JSON) GET — docker logs is a byte stream."""
+        req = urllib.request.Request(
+            PORTAINER_URL + path,
+            headers={"X-API-Key": PORTAINER_TOKEN})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.read()
+
     def endpoint_id(self):
         if self._ep is not None:
             return self._ep
@@ -364,6 +425,12 @@ class PortainerBackend:
 
     def inspect(self, container):
         return self._docker(f"/containers/{container}/json")
+
+    def container_logs(self, container, since):
+        return self._raw(
+            f"/api/endpoints/{self.endpoint_id()}/docker"
+            f"/containers/{container}/logs"
+            f"?since={since}&stdout=true&stderr=true")
 
     def restart(self, container):
         self._docker(f"/containers/{container}/restart?t=10", method="POST", data={})
@@ -573,6 +640,24 @@ def admin_sessions():
         ).fetchall()
     sessions = [dict(compute_session(r, now, params["session_expiry"],
                                      params["session_max_lifetime"])) for r in rows]
+    # 每个 session 的登录来源 IP: 关联 tinyauth 审计流（登录成功事件）
+    try:
+        backend = get_backend()
+        since = (min(s["created_at"] for s in sessions) -60
+                 if sessions else int(time.time()) -60)
+        events = parse_login_events(
+            backend.container_logs(TINYAUTH_CONTAINER, since))
+    except Exception:
+        events = []
+    for s in sessions:
+        best = None
+        for ev in events:
+            if ev["username"] != s["username"]:
+                continue
+            delta = abs(ev["ts"] - s["created_at"])
+            if delta <=10 and (best is None or delta < best[0]):
+                best = (delta, ev)
+        s["login_ip"] = best[1]["ip"] if best else None
     return jsonify(now=now,
                    session_expiry=params["session_expiry"],
                    session_max_lifetime=params["session_max_lifetime"],

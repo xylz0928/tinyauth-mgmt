@@ -265,7 +265,29 @@ def main():
         t("admin sessions -> 200", st == 200, f"{st} {b}")
         by_id = {s["uuid"]: s for s in b.get("sessions", [])}
         t("all5 sessions returned", len(by_id) == 5, f"{len(by_id)}")
+        t("sessions carry login_ip field",
+          all("login_ip" in s for s in b.get("sessions", [])),
+          b.get("sessions", [])[:1])
         t("u-admin-1 active", by_id.get("u-admin-1", {}).get("status") == "active")
+
+        # login-audit parser + docker log demux (session source-IP)
+        import app as appmod
+        import datetime as _dt
+        sample = (b"\x1b[90m2026-11-13T15:00:00+08:00\x1b[0m INF "
+                  b"event=login result=success username=alice provider=local "
+                  b"ip=203.0.113.7\n"
+                  b"2026-11-13T15:00:01+08:00 WRN event=login "
+                  b"result=failure username=bob ip=203.0.113.9 reason=bad\n")
+        evs = appmod.parse_login_events(sample)
+        want_ts = int(_dt.datetime.fromisoformat(
+            "2026-11-13T15:00:00+08:00").timestamp())
+        t("audit parser: success only + ANSI stripped",
+          evs == [{"ts": want_ts, "username": "alice", "ip": "203.0.113.7"}],
+          evs)
+        frame = b"\x01\x00\x00\x00" + (7).to_bytes(4, "big") + b"line123"
+        t("docker log demux (non-tty8-byte frames)",
+          appmod.demux_docker_log(frame) == b"line123",
+          appmod.demux_docker_log(frame))
         t("u-admin-2 expired", by_id.get("u-admin-2", {}).get("status") == "expired")
         s3 = by_id.get("u-admin-3", {})
         t("u-admin-3 active + mfa-pending + renewed flag",

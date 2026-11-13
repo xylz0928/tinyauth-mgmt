@@ -678,8 +678,18 @@ table.data tbody tr:last-child td { border-bottom: none; }
 .session-item:last-child { border-bottom: none; }
 
 .s-uuid {
-	display: block;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	align-items: flex-start;
 	align-self: center;
+}
+.s-ip {
+	font-size: 10.5px;
+	color: var(--text-color-mid);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	white-space: nowrap;
+	opacity: 0.85;
 }
 .uu-narrow { display: none; }
 
@@ -730,7 +740,10 @@ table.data tbody tr:last-child td { border-bottom: none; }
 		align-items: stretch;
 	}
 	.s-uuid {
-		display: inline-block;
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		align-items: flex-start;
 		grid-area: uuid;
 		align-self: center;
 	}
