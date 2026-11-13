@@ -88,6 +88,15 @@ a:hover { text-decoration: underline; }
 	white-space: nowrap;
 }
 
+.brand-version.has-update {
+	background: rgba(224, 160, 19, .16);
+	color: var(--warn-color-low);
+}
+.brand-version a {
+	color: inherit;
+	text-decoration: none;
+}
+
 .header-spacer { flex: 1; }
 
 /* identity chip */

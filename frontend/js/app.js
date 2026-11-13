@@ -19,16 +19,88 @@
 
 	function $(id) { return document.getElementById(id); }
 
-	function toast(msg, kind) {
+	function toast(msg, kind, link) {
 		var layer = $("toast-layer");
 		var el = document.createElement("div");
 		el.className = "toast" + (kind ? " " + kind : "");
 		el.textContent = msg;
+		if (link && link.href) {
+			var la = document.createElement("a");
+			la.href = link.href;
+			la.target = "_blank";
+			la.rel = "noopener";
+			la.textContent = link.label || "\u2192";
+			la.style.cssText = "margin-left:8px;font-weight:700;color:inherit;" +
+				"text-decoration:underline;";
+			el.appendChild(la);
+		}
 		layer.appendChild(el);
 		setTimeout(function () {
 			el.classList.add("out");
 			setTimeout(function () { el.remove(); }, 250);
 		}, kind === "error" ? 4200 : 2800);
+	}
+
+	function verTuple(v) {
+		var m = /^v?(\d+)\.(\d+)(?:\.(\d+))?/.exec(String(v || ""));
+		return m ? [+m[1], +m[2], +(m[3] || 0)] : null;
+	}
+
+	function verGt(a, b) {
+		var x = verTuple(a), y = verTuple(b);
+		if (!x || !y) return false;
+		for (var i = 0; i < 3; i++) {
+			if (x[i] !== y[i]) return x[i] > y[i];
+		}
+		return false;
+	}
+
+	/* online update check, modeled on luci-app-pushbot's status page:
+	   fetch remote version markers (github tags), compare, toast.
+	   - throttled to once/6h via sessionStorage (github api rate limit)
+	   - found -> warn toast + version badge becomes a release link
+	   - latest -> success toast (auto-hides, pushbot's "already latest")
+	   - offline/error -> silent (never alarm the admin over a network flap) */
+	function checkForUpdate(current) {
+		var last = 0;
+		try { last = +(sessionStorage.getItem("tm-updchk") || 0); } catch (e) {}
+		if (Date.now() - last < 6 * 3600 * 1000) return;
+		try { sessionStorage.setItem("tm-updchk", String(Date.now())); } catch (e) {}
+		var ctl = new AbortController();
+		var timer = setTimeout(function () { ctl.abort(); }, 8000);
+		fetch("https://api.github.com/repos/xylz0928/tinyauth-mgmt/tags?per_page=100",
+			{ signal: ctl.signal, headers: { Accept: "application/vnd.github+json" } })
+			.then(function (r) {
+				if (!r.ok) throw new Error("http " + r.status);
+				return r.json();
+			})
+			.then(function (tags) {
+				clearTimeout(timer);
+				var best = null;
+				(Array.isArray(tags) ? tags : []).forEach(function (tg) {
+					var name = tg && tg.name;
+					if (verTuple(name) && (!best || verGt(name, best))) best = name;
+				});
+				if (!best) return;
+				if (verGt(best, current)) {
+					toast(t("update.found", { latest: best, current: current }),
+						"warn",
+						{ href: "https://github.com/xylz0928/tinyauth-mgmt/releases",
+						  label: "GitHub" });
+					var v = $("brand-version");
+					v.classList.add("has-update");
+					v.textContent = "";
+					var a = document.createElement("a");
+					a.href = "https://github.com/xylz0928/tinyauth-mgmt/releases";
+					a.target = "_blank";
+					a.rel = "noopener";
+					a.textContent = current + " \u2192 " + best;
+					v.appendChild(a);
+				} else {
+					toast(t("update.latest"), "success");
+				}
+			})
+			.catch(function () { clearTimeout(timer); /* offline: stay silent */ });
 	}
 
 	function fmtTime(epoch) {
@@ -966,6 +1038,7 @@
 				var v = $("brand-version");
 				v.textContent = h.version;
 				v.hidden = false;
+				checkForUpdate(h.version);
 			}
 		}).catch(function () { /* version is cosmetic */ });
 

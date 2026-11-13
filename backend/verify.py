@@ -570,6 +570,13 @@ def main():
         t("sessions uuid uses fmtUuid9-char wrap (mobile)",
           "function fmtUuid" in appjs and "fmtUuid(s.uuid)" in appjs,
           "fmtUuid missing/unused in app.js")
+        i18nsrc = open(os.path.join(REPO, "frontend/js/i18n.js")).read()
+        t("update check wired (pushbot-style): compare + i18n keys + toast link",
+          "checkForUpdate" in appjs and "verGt" in appjs
+          and i18nsrc.count('"update.found"') >= 2
+          and i18nsrc.count('"update.latest"') >= 2
+          and 'link.href' in appjs,
+          "update-check wiring missing")
         t("i18n wired: index loads i18n.js, app uses __tmI18n, zh dict present",
           'js/i18n.js' in open(os.path.join(REPO, "frontend/index.html")).read()
           and "__tmI18n" in appjs
