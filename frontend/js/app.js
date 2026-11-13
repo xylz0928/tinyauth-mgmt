@@ -104,21 +104,26 @@
 		badge.classList.add("is-checking");
 		var ctl = new AbortController();
 		var timer = setTimeout(function () { ctl.abort(); },8000);
-		fetch("https://api.github.com/repos/xylz0928/tinyauth-mgmt/tags?per_page=100",
-			{ signal: ctl.signal, headers: { Accept: "application/vnd.github+json" } })
+		/* raw file fetch — exactly pushbot's mechanism (raw.githubusercontent,
+		   CDN, no API rate limit; the github tags API is60/hr per egress IP
+		   and shared NAT pools exhaust it fast, and this repo has no git tags) */
+		fetch("https://raw.githubusercontent.com/xylz0928/tinyauth-mgmt/main/README.md",
+			{ signal: ctl.signal })
 			.then(function (r) {
 				if (!r.ok) throw new Error("http " + r.status);
-				return r.json();
+				return r.text();
 			})
-			.then(function (tags) {
+			.then(function (txt) {
 				clearTimeout(timer);
 				badge.classList.remove("is-checking");
 				var best = null;
-				(Array.isArray(tags) ? tags : []).forEach(function (tg) {
-					var name = tg && tg.name;
+				var re = /tinyauth-mgmt:v(\d+(?:\.\d+)*)/g;
+				var m;
+				while ((m = re.exec(txt)) !== null) {
+					var name = "v" + m[1];
 					if (verTuple(name) && (!best || verGt(name, best))) best = name;
-				});
-				if (!best) throw new Error("no tags");
+				}
+				if (!best) throw new Error("no version in readme");
 				if (verGt(best, current)) {
 					showVerCard(t("update.found",
 							{ latest: best, current: current }),
