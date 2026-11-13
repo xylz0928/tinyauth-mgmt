@@ -577,6 +577,8 @@ def main():
         t("update check wired (pushbot-style): badge click + OTA card + i18n",
           "checkForUpdate" in appjs and "tm-ver-toast" in appjs
           and 'v.dataset.ver' in appjs
+          and 'me.role === "admin"' in appjs
+          and "packages/container/package/tinyauth-mgmt" in appjs
           and i18nsrc.count('"update.found"') >= 2
           and i18nsrc.count('"update.latest"') >= 2
           and i18nsrc.count('"update.error"') >= 2

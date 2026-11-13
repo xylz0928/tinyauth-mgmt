@@ -1086,11 +1086,17 @@
 				v.textContent = h.version;
 				v.hidden = false;
 				v.dataset.ver = h.version;
-				v.title = t("update.hint");
 				if (!v._verBound) {
 					v._verBound = true;
 					v.addEventListener("click", function () {
-						checkForUpdate(v.dataset.ver || v.textContent);
+						if (me && me.role === "admin") {
+							checkForUpdate(v.dataset.ver || v.textContent);
+						} else {
+							/* non-admin: straight to the ghcr package page */
+							window.open("https://github.com/users/xylz0928/" +
+								"packages/container/package/tinyauth-mgmt",
+								"_blank", "noopener");
+						}
 					});
 				}
 			}
@@ -1098,6 +1104,10 @@
 
 		api("/api/me").then(function (m) {
 			me = m;
+			var vb = $("brand-version");
+			if (vb) {
+				vb.title = (me && me.role === "admin") ? t("update.hint") : "GitHub";
+			}
 			renderIdentity();
 			renderNav();
 			window.addEventListener("hashchange", route);
