@@ -38,8 +38,6 @@ a:hover { text-decoration: underline; }
 }
 
 .app-header-inner {
-	max-width: 1080px;
-	margin: 0 auto;
 	padding: 10px 20px;
 	display: flex;
 	align-items: center;
@@ -155,8 +153,6 @@ a:hover { text-decoration: underline; }
    Nav tabs
    -------------------------------------------------------------------------- */
 .app-nav {
-	max-width: 1080px;
-	margin: 0 auto;
 	padding: 12px 20px 0;
 	display: flex;
 	gap: 6px;
@@ -187,8 +183,6 @@ a:hover { text-decoration: underline; }
    Main layout
    -------------------------------------------------------------------------- */
 .app-main {
-	max-width: 1080px;
-	margin: 0 auto;
 	padding: 16px 20px 48px;
 }
 
@@ -196,6 +190,7 @@ a:hover { text-decoration: underline; }
    Card — pushbot four-directional shadow
    -------------------------------------------------------------------------- */
 .card {
+	container-type: inline-size;
 	background: var(--card-bg);
 	border: 1px solid var(--card-border);
 	border-radius: 16px;
@@ -696,36 +691,39 @@ table.data tbody tr:last-child td { border-bottom: none; }
 	line-height: 1.35;
 }
 
-@media (max-width:768px) {
-	/* four-row / three-column card:
-	   uuid spans all4 rows; col2 = [USER PROVIDER FLAGS | CREATED | EXPIRES
-	   | REMAINING]; col3 = STATUS (rows1-2) + Kick (rows3-4) */
+/* progressive fallback driven by CARD width (container queries, not viewport):
+   wide -> raw uuid single line; <=900px -> uuid wraps (8+dash lines);
+   <=640px -> full stacked card (uuid left +3 lines, status/kick right) */
+@container (max-width:900px) {
+	.uu-wide { display: none; }
+	.uu-narrow { display: inline; }
+}
+
+@container (max-width:640px) {
 	.session-item {
-		display:grid;
+		display: grid;
 		grid-template-columns: auto minmax(0, 1fr) auto;
 		grid-template-areas:
 			"uuid l1 status"
 			"uuid cr status"
 			"uuid ex kick"
 			"uuid rm kick";
-		gap:8px 12px;
-		align-items:stretch;
+		gap: 8px 12px;
+		align-items: stretch;
 	}
 	.s-uuid {
-		display:inline-block;
-		grid-area:uuid;
-		align-self:center;
+		display: inline-block;
+		grid-area: uuid;
+		align-self: center;
 	}
-	.s-body { display:contents; }        /* children join the item grid */
+	.s-body { display: contents; }
 	.s-l1 { display: flex; grid-area: l1; gap: 6px 12px; }
-	.cell-created { grid-area:cr; }
-	.cell-expires { grid-area:ex; }
-	.cell-remaining { grid-area:rm; }
-	.s-status { grid-area:status; align-self:center; }
-	.s-kick { grid-area:kick; align-self:center; justify-self:start; }
-	.uu-wide { display: none; }
-	.uu-narrow { display: inline; }
-	.s-val { white-space:normal; }
+	.cell-created { grid-area: cr; }
+	.cell-expires { grid-area: ex; }
+	.cell-remaining { grid-area: rm; }
+	.s-status { grid-area: status; align-self: center; }
+	.s-kick { grid-area: kick; align-self: center; justify-self: start; }
+	.s-val { white-space: normal; }
 }
 
 /* --------------------------------------------------------------------------
