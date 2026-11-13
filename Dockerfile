@@ -64,7 +64,7 @@ FROM alpine:3.22
 ARG APP_VERSION=dev
 
 # runtime shared objects the stripped CPython still links against
-RUN apk add --no-cache libssl3 zlib sqlite-libs libffi libuuid readline ncurses-libs
+RUN apk add --no-cache libssl3 zlib sqlite-libs libffi libuuid readline ncurses-libs tzdata
 
 WORKDIR /app
 
