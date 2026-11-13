@@ -583,7 +583,10 @@ def main():
           and i18nsrc.count('"update.latest"') >= 2
           and i18nsrc.count('"update.error"') >= 2
           and i18nsrc.count('"update.ahead"') >= 2
-          and i18nsrc.count('"update.hint"') >= 2,
+          and i18nsrc.count('"update.hint"') >= 2
+          and i18nsrc.count('"update.btn_repo"') >= 2
+          and i18nsrc.count('"update.btn_docker"') >= 2
+          and "update.btn_repo" in appjs and "update.btn_docker" in appjs,
           "update-check wiring missing")
         t("i18n wired: index loads i18n.js, app uses __tmI18n, zh dict present",
           'js/i18n.js' in open(os.path.join(REPO, "frontend/index.html")).read()

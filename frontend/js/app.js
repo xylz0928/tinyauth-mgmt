@@ -85,21 +85,37 @@
 		document.body.appendChild(ov);
 		setTimeout(function () { ov.classList.add("show"); },20);
 		var hideId = null;
+		var closed = false;
 		if (!buttons || !buttons.length) {
 			hideId = setTimeout(dismiss,4000);
 		}
 		function dismiss() {
+			if (closed) return;
+			closed = true;
 			if (hideId) clearTimeout(hideId);
+			document.removeEventListener("click", outside, true);
 			ov.classList.remove("show");
 			setTimeout(function () { ov.remove(); },350);
 		}
+		/* click anywhere outside the card closes it (capture phase, page
+		   stays interactive — the overlay itself is pointer-events:none) */
+		function outside(e) {
+			if (!closed && !card.contains(e.target)) dismiss();
+		}
+		setTimeout(function () {
+			if (!closed) document.addEventListener("click", outside, true);
+		},0);
+		ov._dismiss = dismiss;
 		return { dismiss: dismiss };
 	}
 
 	function checkForUpdate(current) {
 		var badge = $("brand-version");
 		var exist = document.querySelector(".tm-ver-overlay");
-		if (exist) exist.remove();
+		if (exist) {
+			if (exist._dismiss) exist._dismiss();
+			else exist.remove();
+		}
 		if (badge.classList.contains("is-checking")) return;
 		badge.classList.add("is-checking");
 		var ctl = new AbortController();
@@ -128,8 +144,12 @@
 					showVerCard(t("update.found",
 							{ latest: best, current: current }),
 						current + " \u2192 " + best, "is-update",
-						[{ label: "GitHub", onClick: function () {
-							window.open("https://github.com/xylz0928/tinyauth-mgmt/releases",
+						[{ label: t("update.btn_repo"), onClick: function () {
+							window.open("https://github.com/xylz0928/tinyauth-mgmt",
+								"_blank", "noopener");
+						} }, { label: t("update.btn_docker"), onClick: function () {
+							window.open("https://github.com/users/xylz0928/" +
+								"packages/container/package/tinyauth-mgmt",
 								"_blank", "noopener");
 						} }]);
 				} else if (verGt(current, best)) {
